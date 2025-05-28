@@ -1,0 +1,248 @@
+/* 样式文件 */
+
+/* 搜索模态框 */
+.yuhanbo-search-modal {
+    padding: 20px;
+    width: 80vw; /* 增大宽度至视口的80% */
+    max-width: 1000px; /* 增大最大宽度 */
+}
+
+/* 搜索范围标签文字 */
+.search-scope-label {
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--text-normal);
+    margin-right: 10px;
+    margin-bottom: 10px;
+    display: inline-block;
+}
+
+/* 搜索范围按钮容器 */
+.search-scope-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 15px;
+    width: 100%;
+}
+
+/* 搜索范围按钮 */
+.search-scope-button {
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 15px;
+    padding: 5px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    color: var(--text-normal);
+}
+
+/* 选中状态按钮 */
+.search-scope-button.active {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+/* 按钮悬停效果 */
+.search-scope-button:hover {
+    background-color: var(--background-modifier-hover);
+}
+
+.search-scope-button.active:hover {
+    background-color: var(--interactive-accent-hover);
+}
+
+/* 搜索容器 */
+.search-container {
+    display: flex;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+/* 搜索输入框 */
+.search-input {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    font-size: 16px;
+    width: 100%; /* 确保输入框占满宽度 */
+}
+
+/* 大号搜索框样式 */
+.search-input.large {
+    height: 45px;
+    font-size: 18px;
+}
+
+/* 搜索按钮（保留但隐藏，以便兼容性） */
+.search-button {
+    display: none;
+}
+
+/* 原选项容器（保留但修改样式，确保不干扰） */
+.options-container {
+    display: none;
+}
+
+/* 搜索结果 */
+.search-results {
+    max-height: none; /* 完全移除高度限制 */
+    overflow: visible; /* 移除滚动条 */
+    width: 100%;
+    border-top: 1px solid var(--background-modifier-border);
+    padding-top: 15px;
+}
+
+/* 结果数量 */
+.results-count {
+    margin-bottom: 15px;
+    font-weight: bold;
+    font-size: 16px;
+    color: var(--text-accent);
+}
+
+/* 没有结果 */
+.no-results {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 16px;
+}
+
+/* 结果列表 */
+.results-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+/* 单个结果项 */
+.result-item {
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background-color: var(--background-primary);
+    width: 100%; /* 确保结果项占满宽度 */
+}
+
+.result-item:hover {
+    background-color: var(--background-secondary);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 选中的结果项样式 */
+.result-item.selected {
+    background-color: var(--background-secondary-alt);
+    border: 1px solid var(--interactive-accent);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* 结果标题 */
+.result-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    cursor: pointer;
+    color: var(--interactive-accent);
+}
+
+.result-title:hover {
+    text-decoration: underline;
+}
+
+/* 结果路径 */
+.result-path {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    word-break: break-all; /* 允许单词内换行，避免路径溢出 */
+}
+
+/* 匹配容器 */
+.matches-container {
+    margin-bottom: 12px;
+    width: 100%;
+}
+
+/* 单个匹配项 */
+.match-item {
+    margin-bottom: 8px;
+    padding: 8px;
+    background-color: var(--background-primary-alt);
+    border-radius: 4px;
+    line-height: 1.4;
+    width: 100%;
+    word-break: break-word; /* 确保长文本能够正确换行 */
+}
+
+/* 匹配类型 */
+.match-type {
+    font-weight: bold;
+    color: var(--text-accent);
+    margin-right: 5px;
+}
+
+/* 匹配上下文 */
+.match-context {
+    overflow-wrap: break-word;
+    display: inline-block;
+    max-width: 100%;
+}
+
+/* 更多匹配项 */
+.more-matches {
+    margin-top: 8px;
+    font-style: italic;
+    color: var(--text-muted);
+    padding-left: 5px;
+}
+
+/* 结果得分 */
+.result-score {
+    font-size: 12px;
+    color: var(--text-accent);
+    text-align: right;
+    margin-top: 8px;
+}
+
+/* 设置模态框整体滚动，而不是内容区域滚动 */
+.modal {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* 确保内容不超出模态框 */
+.modal-content {
+    width: 100%;
+    overflow-x: hidden;
+}
+
+/* 自动聚焦相关样式 */
+.yuhanbo-search-modal-container {
+    /* 确保模态框获得焦点 */
+    outline: none;
+}
+
+/* 确保输入框即使在非活动状态也能视觉突出 */
+.yuhanbo-search-input-js {
+    outline: 2px solid var(--interactive-accent) !important;
+    outline-offset: 2px;
+    transition: all 0.2s ease;
+}
+
+.yuhanbo-search-input-js:focus {
+    outline: 3px solid var(--interactive-accent) !important;
+    box-shadow: 0 0 8px var(--interactive-accent);
+}
+
+/* 覆盖任何可能干扰自动聚焦的样式 */
+#yuhanbo-search-input {
+    z-index: 10;
+    position: relative;
+} 

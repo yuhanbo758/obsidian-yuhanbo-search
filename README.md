@@ -1,5 +1,3 @@
-注册：插件的索引刷新默认是60分钟，并不是打开OB就加载索引，而是60分钟后。若你的OB不是常驻后台，建议将默认分钟调小一些，否则需要手动刷新。
-
 # Obsidian 自定义加权搜索插件
 
 一个为 Obsidian 笔记软件开发的自定义加权搜索插件，允许用户根据文件名、目录、标签、标题级别等元素进行加权搜索。
@@ -60,21 +58,3 @@ A: 检查是否在"排除的文件夹"中添加了这些文件所在的文件夹
 ## 许可证
 
 MIT 
-
-
-
-# 联系我们
-
-主站：[三人聚智-余汉波 - QMT量化、效率工具和财经知识的搬运工](https://www.sanrenjz.com/)
-
-程序小店（个人开发的所有程序，包括开源和不开源）：[首页 | 三人聚智-余汉波程序小店](https://jy.sanrenjz.com/)
-
-文档站点（财经、代码和库文档等）：[余汉波 文档 | 财经、python与效率工具的知识搬运工](https://wd.sanrenjz.com/)
-
-python 程序管理工具下载：[sanrenjz - 三人聚智-余汉波](https://www.sanrenjz.com/sanrenjz/)
-
-![三码合一](https://gdsx.sanrenjz.com/image/sanrenjz_yuhanbolh_yuhanbo758.png?imageSlim&t=1ab9b82c-e220-8022-beff-e265a194292a)
-
-![余汉波打赏码](https://gdsx.sanrenjz.com/PicGo/%E6%89%93%E8%B5%8F%E7%A0%81500.png)
-
-

@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
 	quoteWeight: 2,
 	excludedFolders: '',
 	cacheUpdateInterval: 60, // 默认60分钟
+	autoUpdateCache: true, // 默认开启自动更新缓存
 }
 
 // 主插件类
@@ -60,13 +61,20 @@ class YuhanboSearchPlugin extends Plugin {
 		// 添加设置选项卡
 		this.addSettingTab(new YuhanboSearchSettingTab(this.app, this));
 
-		// 注册定期更新索引的计时器
-		this.registerInterval(
-			window.setInterval(() => this.updateSearchIndex(), this.settings.cacheUpdateInterval * 60 * 1000)
-		);
-
-		// 初始化索引
-		this.updateSearchIndex();
+		// 根据设置决定是否注册定期更新索引的计时器
+		if (this.settings.autoUpdateCache) {
+			this.registerInterval(
+				window.setInterval(() => this.updateSearchIndex(), this.settings.cacheUpdateInterval * 60 * 1000)
+			);
+			
+			// 延迟5秒后初始化索引，避免影响Obsidian启动速度
+			setTimeout(() => {
+				this.updateSearchIndex();
+			}, 5000);
+		} else {
+			// 如果关闭自动更新，则立即初始化索引
+			this.updateSearchIndex();
+		}
 	}
 
 	onunload() {
@@ -419,48 +427,35 @@ class SearchModal extends Modal {
 			directory: true,
 			tags: true,
 			headings: true,
-			content: true,
-			quotes: true
+			content: false,
+			quotes: false
 		};
 		// 当前选中的结果索引
 		this.selectedResultIndex = -1;
 		// 搜索结果数组
 		this.searchResults = [];
-		// 添加标志以跟踪是否已尝试聚焦
-		this.hasFocused = false;
+		
+		// 设置Scope以便管理键盘事件和焦点
+		this.scope = new this.app.scope.constructor(this.app.scope);
+		this.scope.register([], 'Escape', () => {
+			this.close();
+		});
 	}
 
 	// 添加一个专门的强制聚焦方法
 	forceInputFocus() {
-		if (!this.searchInput || this.hasFocused) return;
+		if (!this.searchInput) return;
 		
-		// 设置标志，避免重复聚焦尝试
-		this.hasFocused = true;
-		
-		// 尝试各种方法确保输入框获得焦点
-		try {
-			// 直接聚焦
-			this.searchInput.focus();
-			
-			// 使用选择来加强聚焦
-			this.searchInput.select();
-			
-			// 模拟用户点击
-			this.searchInput.click();
-			
-			// 尝试使用 activeElement API
-			if (document.activeElement !== this.searchInput) {
-				// 如果当前活动元素不是搜索框，则重新聚焦
-				setTimeout(() => {
-					this.searchInput.focus();
-					console.log("聚焦重试 - activeElement检查");
-				}, 10);
+		// 使用简单直接的聚焦方法
+		setTimeout(() => {
+			try {
+				this.searchInput.focus();
+				this.searchInput.select();
+				console.log("尝试聚焦到搜索框", document.activeElement === this.searchInput ? "成功" : "失败");
+			} catch (e) {
+				console.error("聚焦失败:", e);
 			}
-			
-			console.log("已尝试聚焦到搜索框");
-		} catch (e) {
-			console.error("聚焦失败:", e);
-		}
+		}, 0);
 	}
 
 	onOpen() {
@@ -609,28 +604,13 @@ class SearchModal extends Modal {
 		// 初始调整
 		adjustModalLayout();
 		
-		// 自动聚焦到搜索框 - 使用专门的聚焦方法
-		// 重置聚焦标志
-		this.hasFocused = false;
+		// 激活Scope以管理键盘事件
+		this.app.keymap.pushScope(this.scope);
 		
-		// 立即尝试聚焦
-		this.forceInputFocus();
-		
-		// 延迟50ms再次尝试聚焦
-		setTimeout(() => this.forceInputFocus(), 50);
-		
-		// 延迟200ms再次尝试，这是为了确保在模态框完全渲染和动画结束后聚焦
-		setTimeout(() => this.forceInputFocus(), 200);
-		
-		// 最后一次尝试，在500ms后
+		// 简单的聚焦策略
 		setTimeout(() => {
-			this.forceInputFocus();
-			
-			// 检查是否成功聚焦，如果未成功则显示通知
-			if (document.activeElement !== this.searchInput) {
-				console.warn("自动聚焦失败 - 请尝试点击搜索框");
-			}
-		}, 500);
+			this.searchInput.focus();
+		}, 100);
 	}
 	
 	// 选择下一个搜索结果
@@ -878,6 +858,31 @@ class SearchModal extends Modal {
 	onClose() {
 		const {contentEl} = this;
 		contentEl.empty();
+		
+		// 清理Scope
+		if (this.scope) {
+			this.app.keymap.popScope(this.scope);
+		}
+		
+		// 重置所有状态变量，确保下次打开时状态正确
+		this.selectedResultIndex = -1;
+		this.searchResults = [];
+		this.searchInput = null;
+		this.searchResultsEl = null;
+		
+		// 移除模态框的自定义类
+		this.modalEl.removeClass('yuhanbo-search-modal-container');
+		
+		// 重置模态框样式
+		this.modalEl.style.width = '';
+		this.modalEl.style.maxWidth = '';
+		this.modalEl.style.height = '';
+		this.modalEl.style.maxHeight = '';
+		this.modalEl.style.overflowY = '';
+		
+		// 移除事件监听器（防止内存泄漏）
+		// 注意：通过addEventListener添加的事件会在元素销毁时自动清理
+		// 但registerDomEvent添加的事件会在Modal关闭时自动清理
 	}
 }
 
@@ -1027,6 +1032,18 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}
 				}));
+
+		new Setting(containerEl)
+			.setName('自动更新缓存')
+			.setDesc('开启后，插件加载5秒后会自动更新搜索缓存。关闭后可立即使用搜索功能，但需要手动更新缓存。')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoUpdateCache)
+				.onChange(async (value) => {
+					this.plugin.settings.autoUpdateCache = value;
+					await this.plugin.saveSettings();
+					// 提示用户重启插件以使设置生效
+					new Notice('设置已保存，请重启插件以使设置生效');
+				}));
 				
 		// 添加手动更新索引按钮
 		new Setting(containerEl)
@@ -1041,4 +1058,4 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 }
 
 // 导出插件
-module.exports = YuhanboSearchPlugin; 
+module.exports = YuhanboSearchPlugin;

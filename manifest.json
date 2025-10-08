@@ -1,10 +1,10 @@
 {
 	"id": "obsidian-yuhanbo-search",
 	"name": "yuhanbo-search",
-	"version": "2.0.0",
+	"version": "3.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "自定义加权搜索插件，允许用户根据文件名、目录、标签、标题级别等元素进行加权搜索",
 	"author": "余汉波",
 	"authorUrl": "https://github.com/yuhanbo758",
 	"isDesktopOnly": false
-} 
+}

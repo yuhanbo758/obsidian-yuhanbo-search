@@ -241,8 +241,46 @@
     box-shadow: 0 0 8px var(--interactive-accent);
 }
 
+/* 智能补全建议框样式 */
+.yuhanbo-autocomplete-suggestions {
+    position: absolute;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    min-width: 200px;
+    max-width: 400px;
+}
+
+.yuhanbo-suggestion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-size: 14px;
+    line-height: 1.4;
+    transition: background-color 0.15s ease;
+}
+
+.yuhanbo-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.yuhanbo-suggestion-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.yuhanbo-suggestion-item mark {
+    background: var(--text-highlight-bg);
+    color: var(--text-normal);
+    padding: 1px 2px;
+    border-radius: 2px;
+}
+
 /* 覆盖任何可能干扰自动聚焦的样式 */
 #yuhanbo-search-input {
     z-index: 10;
     position: relative;
-} 
+}

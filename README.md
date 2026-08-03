@@ -1,171 +1,58 @@
-# Obsidian Yuhanbo Search Plugin
+# Yuhanbo Search
 
-一个为 Obsidian 设计的智能搜索和补全插件，支持加权搜索、智能补全和快捷输入功能。
+Yuhanbo Search is an Obsidian plugin for weighted vault search and quick insertion of matching content, heading links, and block links.
 
-## 功能特点
+Yuhanbo Search 是一款 Obsidian 加权搜索与智能补全插件，可按文件名、目录、标签、标题、正文和引用分别设置搜索权重。
 
-### 🔍 智能搜索
-- **多维度搜索**：支持文件名、目录、标签、标题、内容、引用等多个维度的搜索
-- **自定义权重**：用户可以自定义各个搜索维度的权重，优化搜索结果
-- **实时搜索**：输入即搜索，快速响应
-- **智能排序**：基于权重和匹配度的智能排序算法
+## Features
 
-### ⚡ 智能补全
-- **块快捷输入 (@@)**：快速插入内容块，支持中英文多字搜索
-- **标题引用 (@@#)**：快速创建标题链接引用
-- **块引用 (@@@)**：快速创建块链接引用
-- **光标跟随**：提示框智能跟随光标位置
-- **键盘导航**：支持方向键选择和回车确认
+- Weighted search across file names, folders, tags, headings, content, and quotes.
+- Configurable search scope, excluded folders, and per-field weights.
+- `@@keyword`: insert matching text directly.
+- `@@# keyword`: insert a link to a matching heading.
+- `@@@ keyword`: insert a link to a matching block.
+- Keyboard navigation for suggestions and search results.
+- Works on desktop and mobile without Node.js-only APIs.
 
-### 🎯 高级功能
-- **缓存机制**：智能缓存搜索索引，提高搜索性能
-- **排除文件夹**：支持排除特定文件夹，避免搜索不相关内容
-- **自定义搜索范围**：可配置智能补全的搜索文件夹
+## Usage
 
-## 使用方法
+Open **Yuhanbo Search: 打开加权搜索** from the command palette or select the ribbon icon. Choose the fields to search, enter at least two characters, and select a result.
 
-### 智能补全功能
+Smart completion can be enabled in the plugin settings:
 
-#### 1. 块快捷输入 (@@)
+- Type `@@关键词` to insert matching content as plain text.
+- Type `@@# 标题` to insert `[[文件#标题|标题]]`.
+- Type `@@@ 内容` to insert a block link.
+
+No default hotkey is assigned. You can add one under **Settings → Hotkeys**.
+
+## Installation
+
+### Community plugins
+
+After the plugin is accepted into the Obsidian community directory, install **Yuhanbo Search** from **Settings → Community plugins → Browse**.
+
+### Manual installation
+
+Download `main.js`, `manifest.json`, and `styles.css` from the latest GitHub release. Copy them into:
+
+```text
+<vault>/.obsidian/plugins/yuhanbo-search/
 ```
-@@工具 网页浏览
-```
-- 输入 `@@` 后跟搜索关键词
-- 中文需要2个汉字以上，英文需要4个字母以上
-- 直接插入匹配的内容块，不带链接格式
-- 支持空格分隔的多关键词搜索
 
-#### 2. 标题引用 (@@#)
-```
-@@# 汉波 助手
-```
-- 输入 `@@# ` 后跟搜索关键词（注意空格）
-- 搜索所有级别的标题
-- 插入格式：`[[文件名#标题|标题]]`
-- 点击可跳转到对应标题
+Reload Obsidian and enable **Yuhanbo Search**.
 
-#### 3. 块引用 (@@@)
-```
-@@@ 效率工具 管理
-```
-- 输入 `@@@ ` 后跟搜索关键词（注意空格）
-- 搜索内容块并创建引用
-- 插入格式：`[[文件名#^blockid|块内容]]`
-- 点击可跳转到对应块
+## Privacy and permissions
 
-### 传统搜索功能
-1. 使用快捷键或命令面板打开搜索模态框
-2. 选择需要搜索的维度（文件名、目录、标签等）
-3. 输入搜索关键词
-4. 查看按权重排序的搜索结果
-5. 点击结果打开对应文件
+- The plugin reads Markdown files and Obsidian metadata only to build a local search index.
+- Settings are stored locally through Obsidian's plugin data API.
+- The plugin does not send vault content, telemetry, or personal data over the network.
+- The plugin does not modify or delete vault files during search or indexing.
 
-## 设置选项
+## Development and releases
 
-### 智能补全设置
-- **启用智能补全**：开启/关闭智能补全功能
-- **搜索文件夹**：配置智能补全的搜索范围（支持多文件夹）
-- **最小中文长度**：中文搜索的最小字符数（默认2）
-- **最小英文长度**：英文搜索的最小字符数（默认4）
+`npm run build` validates the distributable `main.js`. A push to `main` that changes release files runs GitHub Actions. If the manifest version has already been released, the workflow increments the patch version; otherwise it releases the current version. Each release attaches the files required by Obsidian and includes build-provenance attestations.
 
-### 搜索权重设置
-- **文件名权重**：文件名匹配的权重
-- **目录权重**：目录匹配的权重
-- **标签权重**：标签匹配的权重
-- **标题权重**：各级标题匹配的权重（H1-H4）
-- **内容权重**：正文内容匹配的权重
-- **引用权重**：引用内容匹配的权重
+## License
 
-### 其他设置
-- **排除文件夹**：设置不参与搜索的文件夹列表
-- **缓存更新间隔**：设置搜索索引的自动更新间隔
-- **自动更新缓存**：开启/关闭自动更新功能
-- **手动更新**：提供手动更新搜索索引的按钮
-
-## 安装方法
-
-1. 下载插件文件到 Obsidian 插件目录
-2. 在 Obsidian 设置中启用插件
-3. 根据需要调整搜索权重和智能补全设置
-
-
-## 功能概述
-
-本插件提供三种智能补全模式：
-
-1. **块快捷输入** (`@@`) - 直接插入内容，不创建链接
-2. **标题引用** (`@@#`) - 插入可跳转的标题链接  
-3. **块引用** (`@@@`) - 插入可跳转的块链接
-
-## 重要区别
-
-### 快捷输入 vs 引用
-- **快捷输入** (`@@`): 只插入纯文本内容，无法跳转
-- **引用** (`@@#` 和 `@@@`): 插入 `[[]]` 格式的链接，可以点击跳转到原文件
-
-## 测试步骤
-
-### 1. 块快捷输入测试 (`@@`)
-- 输入：`@@测试`
-- 预期：显示包含"测试"的内容建议
-- 选择后：**直接插入内容文本**，例如：`这是一个测试内容`
-- 结果：纯文本，无链接，无法跳转
-
-### 2. 标题引用测试 (`@@#`)
-- 输入：`@@# 使用方法` （注意：@@# 后必须有空格）
-- 预期：显示包含"使用方法"的标题建议
-- 选择后：**插入链接格式**，例如：`[[三人聚智效率工具（sanrenjz-tools）使用说明#使用方法|使用方法]]`
-- 结果：可点击的链接，能跳转到对应文件的标题位置
-- **完全替换**：`@@# 使用方法` 会被完全替换，不留残余字符
-
-### 3. 块引用测试 (`@@@`)
-- 输入：`@@@ 重要内容` （注意：@@@ 后必须有空格）
-- 预期：显示包含"重要内容"的块建议
-- 选择后：**插入链接格式**，例如：`[[文件名#^blockid|完整的块内容，不管多长都会完整插入]]`
-- 结果：可点击的链接，能跳转到对应文件的具体块位置
-- **完整内容**：插入完整的块内容，不使用省略号截断
-- **完全替换**：`@@@ 重要内容` 会被完全替换，不留残余字符
-
-
-## 许可证
-
-MIT License
-
-## 👨‍💻 作者信息
-
-**余汉波** - 编程爱好者-量化交易和效率工具开发
-
-- **GitHub**: [@yuhanbo758](https://github.com/yuhanbo758)
-
-- **Email**: yuhanbo@sanrenjz.com
-
-- **Website**: [三人聚智](https://www.sanrenjz.com)
-
-## 🌐 相关链接
-
-- 🏠 [项目主页](https://www.sanrenjz.com)
-
-- 📚 [在线文档](https://docs.sanrenjz.com)（财经、代码和库文档等）
-
-- 🛒 [插件商店](https://shop.sanrenjz.com)（个人开发的所有程序，包括开源和不开源）
-
-
-## 联系我们
-
-[联系我们 - 三人聚智-余汉波](https://www.sanrenjz.com/contact_us/)
-
-python 程序管理工具下载：[sanrenjz - 三人聚智-余汉波](https://www.sanrenjz.com/sanrenjz/)
-
-效率工具程序管理下载：[sanrenjz-tools - 三人聚智-余汉波](https://www.sanrenjz.com/sanrenjz-tools/)
-
-![三码合一](https://gdsx.sanrenjz.com/image/sanrenjz_yuhanbolh_yuhanbo758.png?imageSlim&t=1ab9b82c-e220-8022-beff-e265a194292a)
-
-![余汉波打赏码](https://gdsx.sanrenjz.com/image/%E6%89%93%E8%B5%8F%E7%A0%81%E5%90%88%E4%B8%80.png?imageSlim)
-
-## 🙏 致谢
-
-感谢所有为本项目贡献代码和想法的开发者们！
-
----
-**⭐ 如果这个项目对您有帮助，请给它一个 Star！**
-
+[MIT](LICENSE) © Yuhanbo Yu

@@ -1,15 +1,18 @@
-﻿
 {
-	"name": "obsidian-yuhanbo-search",
+	"name": "yuhanbo-search",
 	"version": "3.0.0",
-	"description": "自定义加权搜索插件，允许用户根据文件名、目录、标签、标题级别等元素进行加权搜索",
+	"description": "Weighted vault search and smart text insertion for Obsidian.",
 	"main": "main.js",
+	"scripts": {
+		"build": "node --check main.js",
+		"version": "node scripts/prepare-release.mjs --from-package && git add manifest.json versions.json package-lock.json"
+	},
 	"keywords": [
 		"obsidian",
 		"search",
 		"plugin",
 		"weighted-search"
 	],
-	"author": "余汉波",
+	"author": "Yuhanbo Yu",
 	"license": "MIT"
 }

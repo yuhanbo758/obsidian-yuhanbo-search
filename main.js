@@ -1,5 +1,5 @@
 // 直接使用Obsidian提供的API
-const { Plugin, PluginSettingTab, App, TFile, Notice, Modal, Setting, MarkdownView, EditorPosition } = require('obsidian');
+const { Plugin, PluginSettingTab, TFile, Notice, Modal, Setting, MarkdownView } = require('obsidian');
 
 /**
  * 智能补全建议类
@@ -36,48 +36,31 @@ class AutoCompleteSuggester {
 		// 创建建议容器
 		this.suggestionEl = document.createElement('div');
 		this.suggestionEl.className = 'yuhanbo-autocomplete-suggestions';
-		this.suggestionEl.style.cssText = `
-			position: absolute;
-			background: var(--background-primary);
-			border: 1px solid var(--background-modifier-border);
-			border-radius: 6px;
-			box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-			max-height: 200px;
-			overflow-y: auto;
-			z-index: 1000;
-			min-width: 200px;
-			max-width: 400px;
-		`;
 
 		// 添加建议项
 		suggestions.forEach((suggestion, index) => {
 			const item = document.createElement('div');
 			item.className = 'yuhanbo-suggestion-item';
-			item.style.cssText = `
-				padding: 8px 12px;
-				cursor: pointer;
-				border-bottom: 1px solid var(--background-modifier-border);
-				font-size: 14px;
-				line-height: 1.4;
-			`;
-			
-			// 根据建议类型设置不同的显示样式
-			if (suggestion.type === 'content') {
-				item.innerHTML = `
-					<div style="font-weight: 500; color: var(--text-normal);">${this.highlightMatch(suggestion.preview, query)}</div>
-					<div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${suggestion.file}</div>
-				`;
-			} else if (suggestion.type === 'heading') {
-				item.innerHTML = `
-					<div style="font-weight: 500; color: var(--text-accent);">📝 ${this.highlightMatch(suggestion.text, query)}</div>
-					<div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${suggestion.file}</div>
-				`;
-			} else if (suggestion.type === 'block') {
-				item.innerHTML = `
-					<div style="font-weight: 500; color: var(--text-normal);">🔗 ${this.highlightMatch(suggestion.preview, query)}</div>
-					<div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${suggestion.file}</div>
-				`;
-			}
+
+			// 所有来自笔记和文件名的内容均通过 textContent/createTextNode 渲染，
+			// 避免把用户数据解释为 HTML。
+			const title = document.createElement('div');
+			title.className = suggestion.type === 'heading'
+				? 'yuhanbo-suggestion-title is-heading'
+				: 'yuhanbo-suggestion-title';
+			const prefix = suggestion.type === 'heading' ? '📝 ' : suggestion.type === 'block' ? '🔗 ' : '';
+			title.appendChild(document.createTextNode(prefix));
+			this.appendHighlightedText(
+				title,
+				suggestion.type === 'heading' ? suggestion.text : suggestion.preview,
+				query
+			);
+			item.appendChild(title);
+
+			const file = document.createElement('div');
+			file.className = 'yuhanbo-suggestion-file';
+			file.textContent = suggestion.file;
+			item.appendChild(file);
 
 			item.addEventListener('click', () => this.selectSuggestion(index));
 			item.addEventListener('mouseenter', () => this.setSelectedIndex(index));
@@ -99,20 +82,33 @@ class AutoCompleteSuggester {
 	 * 高亮匹配的文本
 	 * @param {string} text - 原文本
 	 * @param {string} query - 查询字符串
-	 * @returns {string} - 高亮后的HTML
+	 * @param {HTMLElement} container - 承载高亮文本的容器
 	 */
-	highlightMatch(text, query) {
-		if (!query) return text;
+	appendHighlightedText(container, text, query) {
+		const safeText = String(text ?? '');
+		const keywords = String(query ?? '')
+			.split(/\s+/)
+			.filter(Boolean)
+			.sort((a, b) => b.length - a.length)
+			.map(keyword => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
-		const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
-		let result = text;
+		if (keywords.length === 0) {
+			container.appendChild(document.createTextNode(safeText));
+			return;
+		}
 
-		keywords.forEach(keyword => {
-			const regex = new RegExp(`(${keyword})`, 'gi');
-			result = result.replace(regex, '<mark style="background: var(--text-highlight-bg); color: var(--text-normal);">$1</mark>');
-		});
-
-		return result;
+		const matcher = new RegExp(`(${keywords.join('|')})`, 'gi');
+		for (const part of safeText.split(matcher)) {
+			if (!part) continue;
+			if (matcher.test(part)) {
+				const mark = document.createElement('mark');
+				mark.textContent = part;
+				container.appendChild(mark);
+			} else {
+				container.appendChild(document.createTextNode(part));
+			}
+			matcher.lastIndex = 0;
+		}
 	}
 
 	/**
@@ -127,8 +123,10 @@ class AutoCompleteSuggester {
 		const coords = editor.coordsAtPos(cursorPos);
 
 		if (coords) {
-			this.suggestionEl.style.left = `${coords.left}px`;
-			this.suggestionEl.style.top = `${coords.bottom + 5}px`;
+			this.suggestionEl.setCssProps({
+				'--yuhanbo-suggestion-left': `${coords.left}px`,
+				'--yuhanbo-suggestion-top': `${coords.bottom + 5}px`
+			});
 		}
 	}
 
@@ -157,7 +155,7 @@ class AutoCompleteSuggester {
 		if (this.selectedIndex >= 0) {
 			const prevItem = this.suggestionEl.children[this.selectedIndex];
 			if (prevItem) {
-				prevItem.style.background = '';
+				prevItem.classList.remove('is-selected');
 			}
 		}
 
@@ -165,7 +163,7 @@ class AutoCompleteSuggester {
 		this.selectedIndex = index;
 		const currentItem = this.suggestionEl.children[this.selectedIndex];
 		if (currentItem) {
-			currentItem.style.background = 'var(--background-modifier-hover)';
+			currentItem.classList.add('is-selected');
 			currentItem.scrollIntoView({ block: 'nearest' });
 		}
 	}
@@ -176,14 +174,12 @@ class AutoCompleteSuggester {
 	 */
 	selectSuggestion(index) {
 		if (index < 0 || index >= this.suggestions.length || !this.triggerInfo) {
-			console.log('selectSuggestion: 无效的索引或triggerInfo', { index, suggestionsLength: this.suggestions.length, triggerInfo: this.triggerInfo });
 			return;
 		}
 
 		const suggestion = this.suggestions[index];
 		const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!activeView) {
-			console.log('selectSuggestion: 没有活动的编辑器视图');
 			return;
 		}
 
@@ -199,12 +195,6 @@ class AutoCompleteSuggester {
 		// 根据建议类型和触发符生成插入内容
 		let insertText = '';
 		
-		console.log('selectSuggestion: 触发信息', {
-			trigger: this.triggerInfo.trigger,
-			suggestionType: suggestion.type,
-			suggestion: suggestion
-		});
-
 		if (suggestion.type === 'content') {
 			// 块快捷输入 (@@) - 直接插入内容，不带链接
 			insertText = suggestion.content;
@@ -215,14 +205,6 @@ class AutoCompleteSuggester {
 			// 块引用 (@@@) - 插入可跳转的链接格式，使用完整内容而不是预览
 			insertText = `[[${suggestion.file}#^${suggestion.blockId}|${suggestion.content}]]`;
 		}
-
-		console.log('selectSuggestion: 准备插入', {
-			triggerStart,
-			currentCursor,
-			insertText,
-			suggestionType: suggestion.type,
-			trigger: this.triggerInfo.trigger
-		});
 
 		// 替换文本 - 使用当前光标位置而不是保存的位置
 		editor.replaceRange(insertText, triggerStart, currentCursor);
@@ -239,8 +221,6 @@ class AutoCompleteSuggester {
 	handleKeyDown(event) {
 		if (!this.isActive) return false;
 
-		console.log('handleKeyDown: 处理键盘事件', { key: event.key, isActive: this.isActive, selectedIndex: this.selectedIndex });
-
 		switch (event.key) {
 			case 'ArrowDown':
 				event.preventDefault();
@@ -253,7 +233,6 @@ class AutoCompleteSuggester {
 				return true;
 				
 			case 'Enter':
-				console.log('handleKeyDown: 处理回车键', { selectedIndex: this.selectedIndex, suggestions: this.suggestions });
 				event.preventDefault();
 				this.selectSuggestion(this.selectedIndex);
 				return true;
@@ -318,7 +297,6 @@ class YuhanboSearchPlugin extends Plugin {
 		this.addCommand({
 			id: 'open-yuhanbo-search-modal',
 			name: '打开加权搜索',
-			hotkeys: [{ modifiers: ['Ctrl', 'Shift'], key: 'f' }],
 			callback: () => {
 				const searchModal = new SearchModal(this.app, this);
 				searchModal.open();
@@ -337,14 +315,12 @@ class YuhanboSearchPlugin extends Plugin {
 		// 根据设置决定是否注册定期更新索引的计时器
 		if (this.settings.autoUpdateCache) {
 			this.registerInterval(
-				window.setInterval(() => this.updateSearchIndex(), this.settings.cacheUpdateInterval * 60 * 1000)
+				window.setInterval(() => this.updateSearchIndex(false), this.settings.cacheUpdateInterval * 60 * 1000)
 			);
-			
-			setTimeout(() => {
-				this.updateSearchIndex();
-			}, 5000);
+
+			this.app.workspace.onLayoutReady(() => this.updateSearchIndex(false));
 		} else {
-			this.updateSearchIndex();
+			this.app.workspace.onLayoutReady(() => this.updateSearchIndex(false));
 		}
 	}
 
@@ -361,9 +337,14 @@ class YuhanboSearchPlugin extends Plugin {
 				const line = editor.getLine(cursor.line);
 				const beforeCursor = line.substring(0, cursor.ch);
 				
-				this.checkAutoCompleteTrigger(editor, cursor, beforeCursor);
+				// 输入期间做短暂防抖，避免大型仓库中每个按键都触发一次全量搜索。
+				window.clearTimeout(this.autoCompleteTimer);
+				this.autoCompleteTimer = window.setTimeout(() => {
+					this.checkAutoCompleteTrigger(editor, cursor, beforeCursor);
+				}, 200);
 			})
 		);
+		this.register(() => window.clearTimeout(this.autoCompleteTimer));
 
 		// 监听键盘事件 - 使用捕获阶段确保优先处理
 		this.registerDomEvent(document, 'keydown', (event) => {
@@ -382,14 +363,11 @@ class YuhanboSearchPlugin extends Plugin {
 	 * @param {string} beforeCursor - 光标前的文本
 	 */
 	checkAutoCompleteTrigger(editor, cursor, beforeCursor) {
-		console.log('checkAutoCompleteTrigger: 检查触发符', { beforeCursor });
-
 		// 检查块引用触发符 @@@ （优先级最高，最长匹配）
 		const blockMatch = beforeCursor.match(/@@@(\s+)([^@]*?)$/);
 		if (blockMatch) {
 			const fullMatch = blockMatch[0]; // 完整匹配的字符串
 			const query = blockMatch[2].trim();
-			console.log('检测到块引用触发符 @@@', { query, fullMatch });
 			if (this.isValidQuery(query)) {
 				this.triggerBlockSearch(cursor, fullMatch, query);
 				return;
@@ -401,7 +379,6 @@ class YuhanboSearchPlugin extends Plugin {
 		if (headingMatch) {
 			const fullMatch = headingMatch[0]; // 完整匹配的字符串
 			const query = headingMatch[2].trim();
-			console.log('检测到标题引用触发符 @@#', { query, fullMatch });
 			if (this.isValidQuery(query)) {
 				this.triggerHeadingSearch(cursor, fullMatch, query);
 				return;
@@ -413,7 +390,6 @@ class YuhanboSearchPlugin extends Plugin {
 		if (contentMatch) {
 			const fullMatch = contentMatch[0]; // 完整匹配的字符串
 			const query = contentMatch[1].trim();
-			console.log('检测到块快捷输入触发符 @@', { query, fullMatch });
 			if (this.isValidQuery(query)) {
 				this.triggerContentSearch(cursor, fullMatch, query);
 				return;
@@ -698,7 +674,6 @@ class YuhanboSearchPlugin extends Plugin {
 	}
 
 	onunload() {
-		console.log('卸载加权搜索插件');
 		if (this.autoComplete) {
 			this.autoComplete.hideSuggestions();
 		}
@@ -715,8 +690,7 @@ class YuhanboSearchPlugin extends Plugin {
 	/**
 	 * 更新搜索索引
 	 */
-	async updateSearchIndex() {
-		console.log('更新搜索索引...');
+	async updateSearchIndex(showNotice = false) {
 		this.lastIndexTime = Date.now();
 		
 		this.searchIndex = {};
@@ -747,8 +721,9 @@ class YuhanboSearchPlugin extends Plugin {
 			}
 		}
 		
-		console.log('搜索索引已更新');
-		new Notice('搜索索引已更新');
+		if (showNotice) {
+			new Notice('搜索索引已更新');
+		}
 	}
 	
 	/**
@@ -1061,11 +1036,8 @@ class SearchModal extends Modal {
 		};
 		this.selectedResultIndex = -1;
 		this.searchResults = [];
-		
-		this.scope = new this.app.scope.constructor(this.app.scope);
-		this.scope.register([], 'Escape', () => {
-			this.close();
-		});
+		this.focusTimer = null;
+		this.searchDebounceTimer = null;
 	}
 
 	forceInputFocus() {
@@ -1079,7 +1051,7 @@ class SearchModal extends Modal {
 				
 				// 如果聚焦失败且尝试次数小于3，则再次尝试
 				if (document.activeElement !== this.searchInput && attempts < 3) {
-					setTimeout(() => attemptFocus(attempts + 1), 50);
+					this.focusTimer = window.setTimeout(() => attemptFocus(attempts + 1), 50);
 				}
 			} catch (e) {
 				console.error("聚焦失败:", e);
@@ -1091,9 +1063,6 @@ class SearchModal extends Modal {
 	}
 
 	onOpen() {
-		this.modalEl.style.width = '80vw';
-		this.modalEl.style.maxWidth = '1000px';
-		
 		this.modalEl.addClass('yuhanbo-search-modal-container');
 		
 		const {contentEl} = this;
@@ -1101,7 +1070,7 @@ class SearchModal extends Modal {
 		contentEl.addClass('yuhanbo-search-modal');
 		
 		// 确保模态框完全打开后再设置焦点
-		setTimeout(() => this.forceInputFocus(), 50);
+		this.focusTimer = window.setTimeout(() => this.forceInputFocus(), 50);
 		
 		contentEl.createEl('div', {
 			text: '搜索范围:',
@@ -1136,36 +1105,21 @@ class SearchModal extends Modal {
 		
 		this.searchResultsEl = contentEl.createDiv('search-results');
 		
-		const adjustModalLayout = () => {
-			this.modalEl.style.height = 'auto';
-			this.modalEl.style.maxHeight = '90vh';
-			this.modalEl.style.overflowY = 'auto';
-			
-			contentEl.style.width = '100%';
-			
-			const resultItems = this.searchResultsEl.querySelectorAll('.result-item');
-			resultItems.forEach(item => {
-				item.style.width = '100%';
-			});
-		};
 		
-		let debounceTimeout = null;
 		this.searchInput.addEventListener('input', () => {
 			const value = this.searchInput.value.trim();
 			
-			if (debounceTimeout) clearTimeout(debounceTimeout);
+			window.clearTimeout(this.searchDebounceTimer);
 			
 			this.selectedResultIndex = -1;
 			
 			if (value.length >= 2) {
-				debounceTimeout = setTimeout(() => {
+				this.searchDebounceTimer = window.setTimeout(() => {
 					this.performSearch(value);
-					adjustModalLayout();
 				}, 300);
 			} else {
 				this.searchResultsEl.empty();
 				this.searchResults = [];
-				adjustModalLayout();
 			}
 		});
 		
@@ -1194,12 +1148,9 @@ class SearchModal extends Modal {
 				} 
 				else if (this.searchInput.value.trim().length >= 2) {
 					this.performSearch(this.searchInput.value.trim());
-					adjustModalLayout();
 				}
 			}
 		});
-		
-		this.registerDomEvent(window, 'resize', adjustModalLayout);
 		
 		this.registerDomEvent(this.modalEl, 'keydown', (e) => {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -1208,11 +1159,7 @@ class SearchModal extends Modal {
 			}
 		});
 		
-		adjustModalLayout();
-		
-		this.app.keymap.pushScope(this.scope);
-		
-		setTimeout(() => {
+		this.focusTimer = window.setTimeout(() => {
 			this.searchInput.focus();
 		}, 100);
 	}
@@ -1328,7 +1275,12 @@ class SearchModal extends Modal {
 		const resultsCount = this.searchResultsEl.createEl('div', {
 			cls: 'results-count'
 		});
-		resultsCount.innerHTML = `找到 <span style="color: #9370DB;">${this.searchResults.length}</span> 个匹配的结果`;
+		resultsCount.appendText('找到 ');
+		resultsCount.createEl('span', {
+			text: String(this.searchResults.length),
+			cls: 'results-count-number'
+		});
+		resultsCount.appendText(' 个匹配的结果');
 		
 		const resultsList = this.searchResultsEl.createEl('div', {
 			cls: 'results-list'
@@ -1371,7 +1323,7 @@ class SearchModal extends Modal {
 				const matchTypeSpan = matchItem.createEl('span', {
 					cls: 'match-type'
 				});
-				matchTypeSpan.innerHTML = `<span style="color: #9370DB;">[${this.getMatchTypeLabel(match.type)}]</span> `;
+				matchTypeSpan.setText(`[${this.getMatchTypeLabel(match.type)}] `);
 				
 				matchItem.createEl('span', {
 					text: match.context,
@@ -1411,10 +1363,8 @@ class SearchModal extends Modal {
 	onClose() {
 		const {contentEl} = this;
 		contentEl.empty();
-		
-		if (this.scope) {
-			this.app.keymap.popScope(this.scope);
-		}
+		window.clearTimeout(this.focusTimer);
+		window.clearTimeout(this.searchDebounceTimer);
 		
 		this.selectedResultIndex = -1;
 		this.searchResults = [];
@@ -1422,12 +1372,6 @@ class SearchModal extends Modal {
 		this.searchResultsEl = null;
 		
 		this.modalEl.removeClass('yuhanbo-search-modal-container');
-		
-		this.modalEl.style.width = '';
-		this.modalEl.style.maxWidth = '';
-		this.modalEl.style.height = '';
-		this.modalEl.style.maxHeight = '';
-		this.modalEl.style.overflowY = '';
 	}
 }
 
@@ -1443,10 +1387,10 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: '自定义加权搜索插件设置'});
-
 		// 智能补全设置
-		containerEl.createEl('h3', {text: '智能补全设置'});
+		new Setting(containerEl)
+			.setName('智能补全')
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('启用智能补全')
@@ -1495,7 +1439,9 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 				}));
 
 		// 原有搜索设置
-		containerEl.createEl('h3', {text: '搜索权重设置'});
+		new Setting(containerEl)
+			.setName('搜索权重')
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('文件名权重')
@@ -1606,7 +1552,9 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 				}));
 
 		// 其他设置
-		containerEl.createEl('h3', {text: '其他设置'});
+		new Setting(containerEl)
+			.setName('其他')
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('排除的文件夹')
@@ -1650,7 +1598,7 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 			.addButton(button => button
 				.setButtonText('更新索引')
 				.onClick(() => {
-					this.plugin.updateSearchIndex();
+					this.plugin.updateSearchIndex(true);
 				}));
 	}
 }

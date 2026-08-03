@@ -1,10 +1,17 @@
 /* 样式文件 */
 
-/* 搜索模态框 */
+/* 搜索模态框：所有规则都限定在插件自己的类名下，避免影响其他插件。 */
+.modal.yuhanbo-search-modal-container {
+    width: 80vw;
+    max-width: 1000px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
 .yuhanbo-search-modal {
     padding: 20px;
-    width: 80vw; /* 增大宽度至视口的80% */
-    max-width: 1000px; /* 增大最大宽度 */
+    width: 100%;
+    overflow-x: hidden;
 }
 
 /* 搜索范围标签文字 */
@@ -211,18 +218,6 @@
     margin-top: 8px;
 }
 
-/* 设置模态框整体滚动，而不是内容区域滚动 */
-.modal {
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-/* 确保内容不超出模态框 */
-.modal-content {
-    width: 100%;
-    overflow-x: hidden;
-}
-
 /* 自动聚焦相关样式 */
 .yuhanbo-search-modal-container {
     /* 确保模态框获得焦点 */
@@ -244,6 +239,8 @@
 /* 智能补全建议框样式 */
 .yuhanbo-autocomplete-suggestions {
     position: absolute;
+    left: var(--yuhanbo-suggestion-left);
+    top: var(--yuhanbo-suggestion-top);
     background: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: 6px;
@@ -272,11 +269,35 @@
     background: var(--background-modifier-hover);
 }
 
+.yuhanbo-suggestion-item.is-selected {
+    background: var(--background-modifier-hover);
+}
+
+.yuhanbo-suggestion-title {
+    color: var(--text-normal);
+    font-weight: 500;
+}
+
+.yuhanbo-suggestion-title.is-heading {
+    color: var(--text-accent);
+}
+
+.yuhanbo-suggestion-file {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 2px;
+}
+
 .yuhanbo-suggestion-item mark {
     background: var(--text-highlight-bg);
     color: var(--text-normal);
     padding: 1px 2px;
     border-radius: 2px;
+}
+
+.results-count-number,
+.match-type {
+    color: var(--text-accent);
 }
 
 /* 覆盖任何可能干扰自动聚焦的样式 */

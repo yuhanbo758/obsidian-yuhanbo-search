@@ -1,7 +1,7 @@
 {
 	"id": "yuhanbo-search",
 	"name": "Yuhanbo Search",
-	"version": "3.0.1",
+	"version": "3.0.2",
 	"minAppVersion": "1.7.2",
 	"description": "Search your vault with customizable weights and insert matching text, headings, or block links.",
 	"author": "Yuhanbo Yu",

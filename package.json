@@ -1,6 +1,6 @@
 {
 	"name": "yuhanbo-search",
-	"version": "3.0.1",
+	"version": "3.0.2",
 	"description": "Weighted vault search and smart text insertion for Obsidian.",
 	"main": "main.js",
 	"scripts": {

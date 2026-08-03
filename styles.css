@@ -225,14 +225,14 @@
 }
 
 /* 确保输入框即使在非活动状态也能视觉突出 */
-.yuhanbo-search-input-js {
-    outline: 2px solid var(--interactive-accent) !important;
+.yuhanbo-search-modal-container .yuhanbo-search-input-js {
+    outline: 2px solid var(--interactive-accent);
     outline-offset: 2px;
     transition: all 0.2s ease;
 }
 
-.yuhanbo-search-input-js:focus {
-    outline: 3px solid var(--interactive-accent) !important;
+.yuhanbo-search-modal-container .yuhanbo-search-input-js:focus {
+    outline: 3px solid var(--interactive-accent);
     box-shadow: 0 0 8px var(--interactive-accent);
 }
 

@@ -1337,7 +1337,7 @@ class SearchModal extends Modal {
 	}
 
 	renderNextResults() {
-		if (!this.resultsListEl) return;
+		if (!this.resultsListEl || !this.moreResultsButton) return;
 		// 保留全部排序结果，每次按需显示一百条，避免一次创建整个库的 DOM。
 		const start = this.searchResults.length;
 		const batch = this.allSearchResults.slice(start, start + 100);
@@ -1402,7 +1402,10 @@ class SearchModal extends Modal {
 			});
 		});
 		this.resultsCountEl.setText(`找到 ${this.allSearchResults.length} 个匹配的结果，已显示 ${this.searchResults.length} 个`);
-		this.moreResultsButton.hidden = this.searchResults.length >= this.allSearchResults.length;
+		if (this.searchResults.length >= this.allSearchResults.length) {
+			this.moreResultsButton.remove();
+			this.moreResultsButton = null;
+		}
 	}
 
 	getMatchTypeLabel(type) {

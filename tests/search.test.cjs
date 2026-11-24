@@ -121,7 +121,9 @@ test('5000 条搜索结果首次只显示100条，加载更多保留顺序与总
     assert.equal(view.allSearchResults.length, 5000); assert.match(view.resultsCountEl.textContent, /5000/);
     for (let i = 0; i < 49; i++) view.renderNextResults();
     assert.equal(view.searchResults.length, 5000); assert.equal(view.searchResults[4999].file.name, '4999');
-    assert.equal(view.moreResultsButton.hidden, true);
+    assert.equal(view.moreResultsButton, null);
+    view.renderNextResults();
+    assert.equal(view.searchResults.length, 5000);
 });
 test('所有正则元字符均按字面高亮，HTML 内容不进入 innerHTML', () => {
     for (const keyword of ['test[', '(a+)+$', '.*', 'a\\b', '${x}', '^end', 'a|b', 'x?']) {

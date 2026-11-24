@@ -1,6 +1,34 @@
 // 直接使用Obsidian提供的API
 const { Plugin, PluginSettingTab, TFile, Notice, Modal, Setting, MarkdownView } = require('obsidian');
 
+// 搜索按时间片让出主线程，取消后禁止继续扫描或更新界面。
+class SearchCancelledError extends Error {}
+function checkSearchTask(plugin, task) {
+	if (plugin.unloaded || (task && task.cancelled)) throw new SearchCancelledError();
+}
+function createSearchBudget(plugin, task) {
+	let lastYield = performance.now();
+	return () => {
+		checkSearchTask(plugin, task);
+		if (performance.now() - lastYield < 8) return null;
+		return new Promise(resolve => setTimeout(resolve, 0)).then(() => {
+			checkSearchTask(plugin, task);
+			lastYield = performance.now();
+		});
+	};
+}
+function addSuggestion(results, suggestion) {
+	// 只保存得分最高的十条，避免高频关键词占用大量内存和排序时间。
+	results.push(suggestion);
+	results.sort((a, b) => b.score - a.score);
+	if (results.length > 10) results.pop();
+}
+function isPathInFolder(path, folder) {
+	const normalized = String(folder).replace(/\\/g, '/').replace(/\/+$/, '');
+	return !normalized || normalized === '/' || path === normalized || path.startsWith(normalized + '/');
+}
+
+
 /**
  * 智能补全建议类
  * 管理补全建议的显示和交互
@@ -273,6 +301,7 @@ const DEFAULT_SETTINGS = {
 class YuhanboSearchPlugin extends Plugin {
 	
 	async onload() {
+		this.unloaded = false;
 		// 初始化索引和时间戳
 		this.searchIndex = {};
 		this.lastIndexTime = 0;
@@ -308,9 +337,7 @@ class YuhanboSearchPlugin extends Plugin {
 		this.addSettingTab(new YuhanboSearchSettingTab(this.app, this));
 
 		// 注册编辑器监听器（智能补全功能）
-		if (this.settings.enableAutoComplete) {
-			this.registerEditorExtension();
-		}
+		this.registerEditorExtension();
 
 		// 根据设置决定是否注册定期更新索引的计时器
 		if (this.settings.autoUpdateCache) {
@@ -330,8 +357,9 @@ class YuhanboSearchPlugin extends Plugin {
 	registerEditorExtension() {
 		// 监听编辑器变化事件
 		this.registerEvent(
-			this.app.workspace.on('editor-change', (editor, view) => {
-				if (!this.settings.enableAutoComplete) return;
+			this.app.workspace.on('editor-change', (editor) => {
+				this.cancelAutoComplete();
+				if (!this.settings.enableAutoComplete || this.unloaded) return;
 				
 				const cursor = editor.getCursor();
 				const line = editor.getLine(cursor.line);
@@ -340,13 +368,17 @@ class YuhanboSearchPlugin extends Plugin {
 				// 输入期间做短暂防抖，避免大型仓库中每个按键都触发一次全量搜索。
 				window.clearTimeout(this.autoCompleteTimer);
 				this.autoCompleteTimer = window.setTimeout(() => {
-					this.checkAutoCompleteTrigger(editor, cursor, beforeCursor);
+					if (this.settings.enableAutoComplete && !this.unloaded) this.checkAutoCompleteTrigger(editor, cursor, beforeCursor);
 				}, 200);
 			})
 		);
 		this.register(() => window.clearTimeout(this.autoCompleteTimer));
 
 		// 监听键盘事件 - 使用捕获阶段确保优先处理
+		this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+			window.clearTimeout(this.autoCompleteTimer);
+			this.cancelAutoComplete();
+		}));
 		this.registerDomEvent(document, 'keydown', (event) => {
 			if (this.autoComplete.handleKeyDown(event)) {
 				event.stopImmediatePropagation();
@@ -362,42 +394,27 @@ class YuhanboSearchPlugin extends Plugin {
 	 * @param {EditorPosition} cursor - 光标位置
 	 * @param {string} beforeCursor - 光标前的文本
 	 */
-	checkAutoCompleteTrigger(editor, cursor, beforeCursor) {
-		// 检查块引用触发符 @@@ （优先级最高，最长匹配）
-		const blockMatch = beforeCursor.match(/@@@(\s+)([^@]*?)$/);
-		if (blockMatch) {
-			const fullMatch = blockMatch[0]; // 完整匹配的字符串
-			const query = blockMatch[2].trim();
-			if (this.isValidQuery(query)) {
-				this.triggerBlockSearch(cursor, fullMatch, query);
-				return;
-			}
-		}
-
-		// 检查标题引用触发符 @@#
-		const headingMatch = beforeCursor.match(/@@#(\s+)([^@]*?)$/);
-		if (headingMatch) {
-			const fullMatch = headingMatch[0]; // 完整匹配的字符串
-			const query = headingMatch[2].trim();
-			if (this.isValidQuery(query)) {
-				this.triggerHeadingSearch(cursor, fullMatch, query);
-				return;
-			}
-		}
-
-		// 检查块内容搜索触发符 @@ （优先级最低，避免与其他触发符冲突）
-		const contentMatch = beforeCursor.match(/@@([^@#\s]*(?:\s+[^@#]*)*)$/);
-		if (contentMatch) {
-			const fullMatch = contentMatch[0]; // 完整匹配的字符串
-			const query = contentMatch[1].trim();
-			if (this.isValidQuery(query)) {
-				this.triggerContentSearch(cursor, fullMatch, query);
-				return;
-			}
-		}
-
-		// 如果没有匹配到触发符，隐藏建议
+	cancelAutoComplete() {
+		if (this.autoCompleteTask) this.autoCompleteTask.cancelled = true;
 		this.autoComplete.hideSuggestions();
+	}
+
+	checkAutoCompleteTrigger(editor, cursor, beforeCursor) {
+		const match = beforeCursor.match(/(@{2,})([^@]*)$/);
+		if (!match) return;
+		const [, prefix, suffix] = match;
+		let query = suffix;
+		let search = this.searchContent;
+		if (prefix === '@@@' && /^\s/.test(suffix)) {
+			search = this.searchBlocks;
+		} else if (prefix === '@@' && /^#\s/.test(suffix)) {
+			search = this.searchHeadings;
+			query = suffix.slice(1);
+		} else if (prefix !== '@@' || suffix.startsWith('#')) {
+			return;
+		}
+		query = query.trim();
+		if (this.isValidQuery(query)) void this.runAutoCompleteSearch(search, editor, cursor, match[0], query);
 	}
 
 	/**
@@ -423,59 +440,45 @@ class YuhanboSearchPlugin extends Plugin {
 		return false;
 	}
 
-	/**
-	 * 触发内容搜索
-	 * @param {EditorPosition} cursor - 光标位置
-	 * @param {string} trigger - 触发符
-	 * @param {string} query - 查询字符串
-	 */
-	async triggerContentSearch(cursor, trigger, query) {
-		const suggestions = await this.searchContent(query);
-		this.autoComplete.showSuggestions(cursor, trigger, query, suggestions);
+	async runAutoCompleteSearch(search, editor, cursor, trigger, query) {
+		const task = { cancelled: false };
+		this.autoCompleteTask = task;
+		try {
+			const suggestions = await search.call(this, query, task);
+			checkSearchTask(this, task);
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!this.settings.enableAutoComplete || view?.editor !== editor) return;
+			const current = editor.getCursor();
+			if (current.line !== cursor.line || current.ch !== cursor.ch ||
+				!editor.getLine(current.line).slice(0, current.ch).endsWith(trigger)) return;
+			this.autoComplete.showSuggestions(cursor, trigger, query, suggestions);
+		} catch (error) {
+			if (!(error instanceof SearchCancelledError)) console.error('智能补全搜索失败', error);
+		}
 	}
 
-	/**
-	 * 触发标题搜索
-	 * @param {EditorPosition} cursor - 光标位置
-	 * @param {string} trigger - 触发符
-	 * @param {string} query - 查询字符串
-	 */
-	async triggerHeadingSearch(cursor, trigger, query) {
-		const suggestions = await this.searchHeadings(query);
-		this.autoComplete.showSuggestions(cursor, trigger, query, suggestions);
-	}
-
-	/**
-	 * 触发块搜索
-	 * @param {EditorPosition} cursor - 光标位置
-	 * @param {string} trigger - 触发符
-	 * @param {string} query - 查询字符串
-	 */
-	async triggerBlockSearch(cursor, trigger, query) {
-		const suggestions = await this.searchBlocks(query);
-		this.autoComplete.showSuggestions(cursor, trigger, query, suggestions);
-	}
-
-	/**
-	 * 搜索内容 - 使用加权搜索算法
-	 * @param {string} query - 查询字符串
-	 * @returns {Array} - 搜索结果
-	 */
-	async searchContent(query) {
+	async searchContent(query, task = null) {
+		const checkpoint = createSearchBudget(this, task);
 		const results = [];
 		const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
 
 		const searchFolders = this.getSearchFolders();
+		const excludedFolders = this.getExcludedFolders();
 		const files = this.app.vault.getMarkdownFiles();
 
 		for (const file of files) {
-			if (!this.isFileInSearchScope(file, searchFolders)) continue;
+			const pause = checkpoint();
+			if (pause) await pause;
+
+			if (!this.isFileInSearchScope(file, searchFolders) || excludedFolders.some(folder => isPathInFolder(file.path, folder))) continue;
 
 			try {
-				const content = await this.app.vault.read(file);
+				const content = await this.app.vault.cachedRead(file);
+				checkSearchTask(this, task);
 				const lines = content.split('\n');
 
 				for (let i = 0; i < lines.length; i++) {
+					if (i % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const line = lines[i];
 					const lowerLine = line.toLowerCase();
 					
@@ -499,7 +502,7 @@ class YuhanboSearchPlugin extends Plugin {
 
 					// 只有所有关键词都匹配才加入结果
 					if (matchCount === keywords.length && line.trim().length > 0) {
-						results.push({
+						addSuggestion(results, {
 							type: 'content',
 							content: line.trim(),
 							preview: this.truncateText(line.trim(), 60),
@@ -511,12 +514,13 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			} catch (error) {
+				if (error instanceof SearchCancelledError) throw error;
 				console.error(`读取文件 ${file.path} 失败:`, error);
 			}
 		}
 
 		// 按分数排序并限制结果数量
-		return results.sort((a, b) => b.score - a.score).slice(0, 10);
+		return results;
 	}
 
 	/**
@@ -524,19 +528,26 @@ class YuhanboSearchPlugin extends Plugin {
 	 * @param {string} query - 查询字符串
 	 * @returns {Array} - 搜索结果
 	 */
-	async searchHeadings(query) {
+	async searchHeadings(query, task = null) {
+		const checkpoint = createSearchBudget(this, task);
 		const results = [];
 		const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
 
 		const searchFolders = this.getSearchFolders();
+		const excludedFolders = this.getExcludedFolders();
 		const files = this.app.vault.getMarkdownFiles();
 
 		for (const file of files) {
-			if (!this.isFileInSearchScope(file, searchFolders)) continue;
+			const pause = checkpoint();
+			if (pause) await pause;
+
+			if (!this.isFileInSearchScope(file, searchFolders) || excludedFolders.some(folder => isPathInFolder(file.path, folder))) continue;
 
 			const fileCache = this.app.metadataCache.getFileCache(file);
 			if (fileCache && fileCache.headings) {
+				let headingCount = 0;
 				for (const heading of fileCache.headings) {
+					if (headingCount++ % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const headingText = heading.heading.toLowerCase();
 					
 					// 计算匹配分数
@@ -554,7 +565,7 @@ class YuhanboSearchPlugin extends Plugin {
 
 					// 只有所有关键词都匹配才加入结果
 					if (matchCount === keywords.length) {
-						results.push({
+						addSuggestion(results, {
 							type: 'heading',
 							text: heading.heading,
 							level: heading.level,
@@ -569,7 +580,7 @@ class YuhanboSearchPlugin extends Plugin {
 		}
 
 		// 按分数排序并限制结果数量
-		return results.sort((a, b) => b.score - a.score).slice(0, 10);
+		return results;
 	}
 
 	/**
@@ -577,21 +588,28 @@ class YuhanboSearchPlugin extends Plugin {
 	 * @param {string} query - 查询字符串
 	 * @returns {Array} - 搜索结果
 	 */
-	async searchBlocks(query) {
+	async searchBlocks(query, task = null) {
+		const checkpoint = createSearchBudget(this, task);
 		const results = [];
 		const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
 
 		const searchFolders = this.getSearchFolders();
+		const excludedFolders = this.getExcludedFolders();
 		const files = this.app.vault.getMarkdownFiles();
 
 		for (const file of files) {
-			if (!this.isFileInSearchScope(file, searchFolders)) continue;
+			const pause = checkpoint();
+			if (pause) await pause;
+
+			if (!this.isFileInSearchScope(file, searchFolders) || excludedFolders.some(folder => isPathInFolder(file.path, folder))) continue;
 
 			try {
-				const content = await this.app.vault.read(file);
+				const content = await this.app.vault.cachedRead(file);
+				checkSearchTask(this, task);
 				const lines = content.split('\n');
 
 				for (let i = 0; i < lines.length; i++) {
+					if (i % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const line = lines[i];
 					const lowerLine = line.toLowerCase();
 					
@@ -610,7 +628,7 @@ class YuhanboSearchPlugin extends Plugin {
 					if (matchCount === keywords.length && line.trim().length > 0) {
 						const blockId = this.generateBlockId(line, i);
 						
-						results.push({
+						addSuggestion(results, {
 							type: 'block',
 							content: line.trim(),
 							preview: this.truncateText(line.trim(), 60),
@@ -623,12 +641,13 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			} catch (error) {
+				if (error instanceof SearchCancelledError) throw error;
 				console.error(`读取文件 ${file.path} 失败:`, error);
 			}
 		}
 
 		// 按分数排序并限制结果数量
-		return results.sort((a, b) => b.score - a.score).slice(0, 10);
+		return results;
 	}
 
 	/**
@@ -648,7 +667,7 @@ class YuhanboSearchPlugin extends Plugin {
 	 */
 	isFileInSearchScope(file, searchFolders) {
 		if (searchFolders.length === 0) return true;
-		return searchFolders.some(folder => file.path.startsWith(folder));
+		return searchFolders.some(folder => isPathInFolder(file.path, folder));
 	}
 
 	/**
@@ -674,6 +693,8 @@ class YuhanboSearchPlugin extends Plugin {
 	}
 
 	onunload() {
+		this.unloaded = true;
+		if (this.autoCompleteTask) this.autoCompleteTask.cancelled = true;
 		if (this.autoComplete) {
 			this.autoComplete.hideSuggestions();
 		}
@@ -690,42 +711,53 @@ class YuhanboSearchPlugin extends Plugin {
 	/**
 	 * 更新搜索索引
 	 */
+	getExcludedFolders() {
+		return this.settings.excludedFolders.split(',').map(folder => folder.trim()).filter(Boolean);
+	}
+
 	async updateSearchIndex(showNotice = false) {
-		this.lastIndexTime = Date.now();
-		
-		this.searchIndex = {};
-		const excludedFolders = this.settings.excludedFolders.split(',').map(f => f.trim());
-		
-		const files = this.app.vault.getMarkdownFiles();
-		for (const file of files) {
-			const shouldExclude = excludedFolders.some(folder => 
-				folder && file.path.startsWith(folder)
-			);
-			
-			if (shouldExclude) continue;
-			
+		if (this.unloaded) return;
+		if (!this.indexUpdatePromise) {
+			this.indexUpdatePromise = this.buildSearchIndex().catch(error => {
+				if (!(error instanceof SearchCancelledError)) console.error('搜索索引更新失败', error);
+				return false;
+			}).finally(() => { this.indexUpdatePromise = null; });
+		}
+		if (await this.indexUpdatePromise && showNotice && !this.unloaded) new Notice('搜索索引已更新');
+	}
+
+	async buildSearchIndex() {
+		const checkpoint = createSearchBudget(this);
+		const excludedFolders = this.getExcludedFolders();
+		const nextIndex = Object.create(null);
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const pause = checkpoint();
+			if (pause) await pause;
+			if (excludedFolders.some(folder => isPathInFolder(file.path, folder))) continue;
 			try {
-				const content = await this.app.vault.read(file);
-				
-				this.searchIndex[file.path] = {
+				const content = await this.app.vault.cachedRead(file);
+				checkSearchTask(this);
+				const metadata = this.app.metadataCache.getFileCache(file);
+				nextIndex[file.path] = {
 					fileName: file.name,
 					directory: file.parent ? file.parent.path : '/',
-					content: content,
-					tags: this.app.metadataCache.getFileCache(file) ? 
-					      this.getAllTags(this.app.metadataCache.getFileCache(file)) : [],
+					content,
+					tags: this.getAllTags(metadata),
 					headings: this.extractHeadings(file),
-					quotes: this.extractQuotes(content)
+					quotes: await this.extractQuotes(content, checkpoint)
 				};
 			} catch (error) {
+				if (error instanceof SearchCancelledError) throw error;
 				console.error(`索引文件 ${file.path} 时出错:`, error);
 			}
 		}
-		
-		if (showNotice) {
-			new Notice('搜索索引已更新');
-		}
+		// 避免索引刷新期间搜索读到一半的新数据。
+		checkSearchTask(this);
+		this.searchIndex = nextIndex;
+		this.lastIndexTime = Date.now();
+		return true;
 	}
-	
+
 	/**
 	 * 获取所有标签的辅助函数
 	 * @param {Object} fileCache - 文件缓存对象
@@ -800,11 +832,15 @@ class YuhanboSearchPlugin extends Plugin {
 	 * @param {string} content - 文件内容
 	 * @returns {Array} - 引用数组
 	 */
-	extractQuotes(content) {
+	async extractQuotes(content, checkpoint) {
 		const quotes = [];
 		const lines = content.split('\n');
 		
 		for (let i = 0; i < lines.length; i++) {
+			if (i % 128 === 0) {
+				const pause = checkpoint();
+				if (pause) await pause;
+			}
 			if (lines[i].startsWith('>')) {
 				quotes.push(lines[i]);
 			}
@@ -819,7 +855,9 @@ class YuhanboSearchPlugin extends Plugin {
 	 * @param {Object} options - 搜索选项
 	 * @returns {Array} - 搜索结果
 	 */
-	search(query, options = {}) {
+	async search(query, options = {}, task = null) {
+		const checkpoint = createSearchBudget(this, task);
+		const index = this.searchIndex;
 		const results = [];
 		const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
 		
@@ -836,14 +874,22 @@ class YuhanboSearchPlugin extends Plugin {
 		
 		const searchOptions = {...defaultOptions, ...options};
 		
-		for (const filePath in this.searchIndex) {
-			const fileData = this.searchIndex[filePath];
+		for (const filePath in index) {
+			const pause = checkpoint();
+			if (pause) await pause;
+			const fileData = index[filePath];
 			const file = this.app.vault.getAbstractFileByPath(filePath);
 			
 			if (!(file instanceof TFile)) continue;
-			
 			let fileScore = 0;
 			const matches = [];
+			let matchCount = 0;
+			let firstLineMatch = null;
+			const addMatch = match => {
+				if (!firstLineMatch && match.line !== undefined) firstLineMatch = match;
+				matchCount++;
+				if (matches.length < 3) matches.push(match);
+			};
 			
 			// 搜索文件名
 			if (searchOptions.fileName) {
@@ -852,7 +898,7 @@ class YuhanboSearchPlugin extends Plugin {
 					if (fileName.includes(keyword)) {
 						const matchScore = this.settings.fileNameWeight;
 						fileScore += matchScore;
-						matches.push({
+						addMatch({
 							type: 'fileName',
 							context: fileData.fileName
 						});
@@ -867,7 +913,7 @@ class YuhanboSearchPlugin extends Plugin {
 					if (directory.includes(keyword)) {
 						const matchScore = this.settings.directoryWeight;
 						fileScore += matchScore;
-						matches.push({
+						addMatch({
 							type: 'directory',
 							context: fileData.directory
 						});
@@ -878,12 +924,13 @@ class YuhanboSearchPlugin extends Plugin {
 			// 搜索标签
 			if (searchOptions.tags && fileData.tags) {
 				for (const tag of fileData.tags) {
-					const tagText = tag.toLowerCase();
+					const pause = checkpoint(); if (pause) await pause;
+					const tagText = String(tag ?? '').toLowerCase();
 					for (const keyword of keywords) {
 						if (tagText.includes(keyword)) {
 							const matchScore = this.settings.tagWeight;
 							fileScore += matchScore;
-							matches.push({
+							addMatch({
 								type: 'tag',
 								context: tag
 							});
@@ -891,16 +938,17 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			}
-			
+
 			// 搜索标题
 			if (searchOptions.headings) {
 				for (const h1 of fileData.headings.h1) {
+					const pause = checkpoint(); if (pause) await pause;
 					const heading = h1.text.toLowerCase();
 					for (const keyword of keywords) {
 						if (heading.includes(keyword)) {
 							const matchScore = this.settings.heading1Weight;
 							fileScore += matchScore;
-							matches.push({
+							addMatch({
 								type: 'heading1',
 								context: h1.text,
 								line: h1.position
@@ -910,12 +958,13 @@ class YuhanboSearchPlugin extends Plugin {
 				}
 				
 				for (const h2 of fileData.headings.h2) {
+					const pause = checkpoint(); if (pause) await pause;
 					const heading = h2.text.toLowerCase();
 					for (const keyword of keywords) {
 						if (heading.includes(keyword)) {
 							const matchScore = this.settings.heading2Weight;
 							fileScore += matchScore;
-							matches.push({
+							addMatch({
 								type: 'heading2',
 								context: h2.text,
 								line: h2.position
@@ -925,12 +974,13 @@ class YuhanboSearchPlugin extends Plugin {
 				}
 				
 				for (const h3 of fileData.headings.h3) {
+					const pause = checkpoint(); if (pause) await pause;
 					const heading = h3.text.toLowerCase();
 					for (const keyword of keywords) {
 						if (heading.includes(keyword)) {
 							const matchScore = this.settings.heading3Weight;
 							fileScore += matchScore;
-							matches.push({
+							addMatch({
 								type: 'heading3',
 								context: h3.text,
 								line: h3.position
@@ -940,12 +990,13 @@ class YuhanboSearchPlugin extends Plugin {
 				}
 				
 				for (const h4 of fileData.headings.h4) {
+					const pause = checkpoint(); if (pause) await pause;
 					const heading = h4.text.toLowerCase();
 					for (const keyword of keywords) {
 						if (heading.includes(keyword)) {
 							const matchScore = this.settings.heading4Weight;
 							fileScore += matchScore;
-							matches.push({
+							addMatch({
 								type: 'heading4',
 								context: h4.text,
 								line: h4.position
@@ -955,49 +1006,50 @@ class YuhanboSearchPlugin extends Plugin {
 				}
 			}
 			
-			// 搜索内容
-			if (searchOptions.content) {
-				const content = fileData.content.toLowerCase();
-				const lines = fileData.content.split('\n');
-				
+			if (searchOptions.content && fileData.content) {
+				const content = fileData.content;
+				const lowerContent = content.toLowerCase();
+				const lines = content.split('\n');
 				for (const keyword of keywords) {
-					let startIdx = 0;
-					while (true) {
-						const idx = content.indexOf(keyword, startIdx);
-						if (idx === -1) break;
-						
-						const matchScore = this.settings.contentWeight;
-						fileScore += matchScore;
-						
-						let lineNumber = 0;
-						let charCount = 0;
-						while (lineNumber < lines.length && charCount + lines[lineNumber].length + 1 <= idx) {
-							charCount += lines[lineNumber].length + 1;
-							lineNumber++;
+					let offset = 0;
+					let line = 0;
+					let nextLineEnd = lowerContent.indexOf('\n');
+					let occurrences = 0;
+					for (let match = lowerContent.indexOf(keyword); match !== -1; match = lowerContent.indexOf(keyword, offset)) {
+						if (occurrences++ % 128 === 0) {
+							const pause = checkpoint();
+							if (pause) await pause;
 						}
-						
-						const lineContent = lines[lineNumber] || '';
-						
-						matches.push({
-							type: 'content',
-							context: lineContent,
-							line: lineNumber
-						});
-						
-						startIdx = idx + keyword.length;
+						// 用小写文本的换行位置定位，兼容转小写后长度变化的字符。
+						while (nextLineEnd !== -1 && nextLineEnd < match && (matches.length < 3 || !firstLineMatch)) {
+							line++;
+							nextLineEnd = lowerContent.indexOf('\n', nextLineEnd + 1);
+							if (line % 128 === 0) {
+								const pause = checkpoint();
+								if (pause) await pause;
+							}
+						}
+						fileScore += this.settings.contentWeight;
+						if (matches.length < 3 || !firstLineMatch) {
+							addMatch({ type: 'content', context: lines[line], line });
+						} else {
+							matchCount++;
+						}
+						offset = match + keyword.length;
 					}
 				}
 			}
-			
+
 			// 搜索引用
 			if (searchOptions.quotes && fileData.quotes) {
 				for (let i = 0; i < fileData.quotes.length; i++) {
+					if (i % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const quote = fileData.quotes[i].toLowerCase();
 					for (const keyword of keywords) {
 						if (quote.includes(keyword)) {
 							const matchScore = this.settings.quoteWeight;
 							fileScore += matchScore;
-							matches.push({
+							addMatch({
 								type: 'quote',
 								context: fileData.quotes[i]
 							});
@@ -1010,7 +1062,9 @@ class YuhanboSearchPlugin extends Plugin {
 				results.push({
 					file: file,
 					score: fileScore,
-					matches: matches
+					matches: matches,
+					matchCount: matchCount,
+					firstLineMatch: firstLineMatch
 				});
 			}
 		}
@@ -1019,6 +1073,7 @@ class YuhanboSearchPlugin extends Plugin {
 		
 		return results;
 	}
+
 }
 
 // 搜索模态框类
@@ -1038,6 +1093,7 @@ class SearchModal extends Modal {
 		this.searchResults = [];
 		this.focusTimer = null;
 		this.searchDebounceTimer = null;
+		this.searchTask = null;
 	}
 
 	forceInputFocus() {
@@ -1045,6 +1101,7 @@ class SearchModal extends Modal {
 		
 		// 使用多次尝试聚焦的方式，确保在不同情况下都能成功聚焦
 		const attemptFocus = (attempts = 0) => {
+			if (!this.searchInput) return;
 			try {
 				this.searchInput.focus();
 				this.searchInput.select();
@@ -1107,22 +1164,15 @@ class SearchModal extends Modal {
 		
 		
 		this.searchInput.addEventListener('input', () => {
-			const value = this.searchInput.value.trim();
-			
 			window.clearTimeout(this.searchDebounceTimer);
-			
-			this.selectedResultIndex = -1;
-			
-			if (value.length >= 2) {
-				this.searchDebounceTimer = window.setTimeout(() => {
-					this.performSearch(value);
-				}, 300);
-			} else {
-				this.searchResultsEl.empty();
-				this.searchResults = [];
+			this.cancelSearch();
+			this.clearSearchResults();
+			const query = this.searchInput.value.trim();
+			if (query.length >= 2) {
+				this.searchDebounceTimer = window.setTimeout(() => this.performSearch(query), 300);
 			}
 		});
-		
+
 		this.searchInput.addEventListener('keydown', (e) => {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 				e.preventDefault();
@@ -1152,16 +1202,6 @@ class SearchModal extends Modal {
 			}
 		});
 		
-		this.registerDomEvent(this.modalEl, 'keydown', (e) => {
-			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-				e.preventDefault();
-				e.stopPropagation();
-			}
-		});
-		
-		this.focusTimer = window.setTimeout(() => {
-			this.searchInput.focus();
-		}, 100);
 	}
 	
 	selectNextResult() {
@@ -1185,19 +1225,18 @@ class SearchModal extends Modal {
 	}
 	
 	removeSelectionHighlight() {
-		const allResults = this.searchResultsEl.querySelectorAll('.result-item');
-		allResults.forEach(item => {
-			item.removeClass('selected');
-		});
+		if (this.highlightedResultEl) this.highlightedResultEl.removeClass('selected');
+		this.highlightedResultEl = null;
 	}
 	
 	highlightSelectedResult() {
 		if (this.selectedResultIndex < 0) return;
 		
-		const allResults = this.searchResultsEl.querySelectorAll('.result-item');
+		const allResults = this.resultsListEl ? this.resultsListEl.children : [];
 		if (this.selectedResultIndex < allResults.length) {
 			const selectedItem = allResults[this.selectedResultIndex];
 			selectedItem.addClass('selected');
+			this.highlightedResultEl = selectedItem;
 			
 			const containerRect = this.modalEl.getBoundingClientRect();
 			const itemRect = selectedItem.getBoundingClientRect();
@@ -1214,7 +1253,7 @@ class SearchModal extends Modal {
 	openResult(result) {
 		if (!result || !result.file) return;
 		
-		const lineMatch = result.matches.find(m => m.line !== undefined);
+		const lineMatch = result.firstLineMatch || result.matches.find(m => m.line !== undefined);
 		if (lineMatch && lineMatch.line !== undefined) {
 			this.app.workspace.openLinkText(result.file.path, '', true, {
 				eState: { line: lineMatch.line }
@@ -1249,49 +1288,68 @@ class SearchModal extends Modal {
 		return button;
 	}
 	
-	performSearch(query = null) {
-		if (!query) {
-			query = this.searchInput.value.trim();
-		}
-		
-		if (!query) {
-			new Notice('请输入搜索关键词');
-			return;
-		}
-		
-		this.searchResultsEl.empty();
+	clearSearchResults() {
+		this.searchResultsEl?.empty();
+		this.searchResults = [];
+		this.allSearchResults = [];
+		this.resultsListEl = null;
+		this.resultsCountEl = null;
+		this.moreResultsButton = null;
+		this.highlightedResultEl = null;
 		this.selectedResultIndex = -1;
-		
-		this.searchResults = this.plugin.search(query, this.options);
-		
-		if (this.searchResults.length === 0) {
-			this.searchResultsEl.createEl('div', {
-				text: '没有找到匹配的结果',
-				cls: 'no-results'
-			});
-			return;
+	}
+
+	cancelSearch() {
+		if (this.searchTask) this.searchTask.cancelled = true;
+	}
+
+	async performSearch(query = null) {
+		if (!this.searchResultsEl) return;
+		query = query || (this.searchInput && this.searchInput.value.trim());
+		if (!query) return;
+		clearTimeout(this.searchDebounceTimer);
+		this.cancelSearch();
+		const task = { cancelled: false };
+		this.searchTask = task;
+		this.clearSearchResults();
+		const loadingEl = this.searchResultsEl.createEl('div', { text: '正在搜索...', cls: 'search-loading' });
+		try {
+			const results = await this.plugin.search(query, {...this.options}, task);
+			checkSearchTask(this.plugin, task);
+			if (this.searchTask !== task || !this.searchResultsEl) return;
+			loadingEl.remove();
+			if (!results.length) {
+				this.searchResultsEl.createEl('div', { text: '没有找到匹配的结果', cls: 'no-results' });
+				return;
+			}
+			this.allSearchResults = results;
+			this.resultsCountEl = this.searchResultsEl.createEl('div', { cls: 'results-count' });
+			this.resultsListEl = this.searchResultsEl.createDiv('results-list');
+			this.moreResultsButton = this.searchResultsEl.createEl('button', { text: '加载更多结果' });
+			this.moreResultsButton.addEventListener('click', () => this.renderNextResults());
+			this.renderNextResults();
+		} catch (error) {
+			if (error instanceof SearchCancelledError || !this.searchResultsEl || this.searchTask !== task) return;
+			loadingEl.remove();
+			this.searchResultsEl.createEl('div', { text: '搜索失败，请查看开发者控制台', cls: 'no-results' });
+			console.error('加权搜索失败', error);
 		}
-		
-		const resultsCount = this.searchResultsEl.createEl('div', {
-			cls: 'results-count'
-		});
-		resultsCount.appendText('找到 ');
-		resultsCount.createEl('span', {
-			text: String(this.searchResults.length),
-			cls: 'results-count-number'
-		});
-		resultsCount.appendText(' 个匹配的结果');
-		
-		const resultsList = this.searchResultsEl.createEl('div', {
-			cls: 'results-list'
-		});
-		
-		this.searchResults.forEach((result, index) => {
+	}
+
+	renderNextResults() {
+		if (!this.resultsListEl) return;
+		// 保留全部排序结果，每次按需显示一百条，避免一次创建整个库的 DOM。
+		const start = this.searchResults.length;
+		const batch = this.allSearchResults.slice(start, start + 100);
+		this.searchResults.push(...batch);
+		const resultsList = this.resultsListEl;
+		batch.forEach((result, offset) => {
+			const index = start + offset;
 			const resultItem = resultsList.createDiv('result-item');
 			
 			resultItem.dataset.resultIndex = index;
 			
-			const fileTitle = resultItem.createEl('div', {
+			resultItem.createEl('div', {
 				text: result.file.name,
 				cls: 'result-title'
 			});
@@ -1326,14 +1384,14 @@ class SearchModal extends Modal {
 				matchTypeSpan.setText(`[${this.getMatchTypeLabel(match.type)}] `);
 				
 				matchItem.createEl('span', {
-					text: match.context,
+					text: this.plugin.truncateText(String(match.context || ''), 500),
 					cls: 'match-context'
 				});
 			}
 			
-			if (result.matches.length > maxMatchesToShow) {
+			if ((result.matchCount || result.matches.length) > maxMatchesToShow) {
 				matchesContainer.createEl('div', {
-					text: `...以及其他 ${result.matches.length - maxMatchesToShow} 个匹配项`,
+					text: `...以及其他 ${(result.matchCount || result.matches.length) - maxMatchesToShow} 个匹配项`,
 					cls: 'more-matches'
 				});
 			}
@@ -1343,8 +1401,10 @@ class SearchModal extends Modal {
 				cls: 'result-score'
 			});
 		});
+		this.resultsCountEl.setText(`找到 ${this.allSearchResults.length} 个匹配的结果，已显示 ${this.searchResults.length} 个`);
+		this.moreResultsButton.hidden = this.searchResults.length >= this.allSearchResults.length;
 	}
-	
+
 	getMatchTypeLabel(type) {
 		switch(type) {
 			case 'fileName': return '文件名';
@@ -1366,8 +1426,8 @@ class SearchModal extends Modal {
 		window.clearTimeout(this.focusTimer);
 		window.clearTimeout(this.searchDebounceTimer);
 		
-		this.selectedResultIndex = -1;
-		this.searchResults = [];
+		this.cancelSearch();
+		this.clearSearchResults();
 		this.searchInput = null;
 		this.searchResultsEl = null;
 		
@@ -1399,6 +1459,7 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.enableAutoComplete)
 				.onChange(async (value) => {
 					this.plugin.settings.enableAutoComplete = value;
+					if (!value) this.plugin.cancelAutoComplete();
 					await this.plugin.saveSettings();
 					new Notice('设置已保存，请重启插件以使设置生效');
 				}));

@@ -26,11 +26,13 @@ Smart completion can be enabled in the plugin settings:
 
 No default hotkey is assigned. You can add one under **Settings → Hotkeys**.
 
+Results initially show the top 100 files. Select **加载更多结果** to continue through the ranked list. The displayed previews are limited, but every match still contributes to the score. Changing the search or closing the dialog cancels the previous scan.
+
 ## Installation
 
 ### Community plugins
 
-After the plugin is accepted into the Obsidian community directory, install **Yuhanbo Search** from **Settings → Community plugins → Browse**.
+Install **Yuhanbo Search** from **Settings → Community plugins → Browse**.
 
 ### Manual installation
 
@@ -51,7 +53,7 @@ Reload Obsidian and enable **Yuhanbo Search**.
 
 ## Development and releases
 
-`npm run build` validates the distributable `main.js`. A push to `main` that changes release files runs GitHub Actions. If the manifest version has already been released, the workflow increments the patch version; otherwise it releases the current version. Each release attaches the files required by Obsidian and includes build-provenance attestations.
+`npm run build` checks the distributable `main.js`, and `npm test` runs the search regression suite. A push to `main` that changes release files runs GitHub Actions. If the manifest version has already been released, the workflow increments the patch version; otherwise it releases the current version. Each release attaches the files required by Obsidian and includes build-provenance attestations.
 
 ## License
 

@@ -1,10 +1,11 @@
 {
 	"name": "yuhanbo-search",
-	"version": "3.0.2",
+	"version": "3.0.3",
 	"description": "Weighted vault search and smart text insertion for Obsidian.",
 	"main": "main.js",
 	"scripts": {
 		"build": "node --check main.js",
+		"test": "node --test tests/search.test.cjs",
 		"version": "node scripts/prepare-release.mjs --from-package && git add manifest.json versions.json package-lock.json"
 	},
 	"keywords": [

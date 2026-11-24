@@ -12,6 +12,7 @@ on:
       - package-lock.json
       - versions.json
       - scripts/prepare-release.mjs
+      - tests/search.test.cjs
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -66,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           npm run build
-          node --check main.js
+          npm test
           git diff --check
           test -s main.js
           test -s manifest.json

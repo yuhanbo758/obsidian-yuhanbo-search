@@ -53,7 +53,7 @@ class AutoCompleteSuggester {
 	 */
 	showSuggestions(cursorPos, trigger, query, suggestions) {
 		this.hideSuggestions();
-		
+
 		if (!suggestions || suggestions.length === 0) return;
 
 		this.isActive = true;
@@ -92,16 +92,16 @@ class AutoCompleteSuggester {
 
 			item.addEventListener('click', () => this.selectSuggestion(index));
 			item.addEventListener('mouseenter', () => this.setSelectedIndex(index));
-			
+
 			this.suggestionEl.appendChild(item);
 		});
 
 		// 定位建议框
 		this.positionSuggestions(cursorPos);
-		
+
 		// 添加到DOM
 		document.body.appendChild(this.suggestionEl);
-		
+
 		// 默认选中第一个
 		this.setSelectedIndex(0);
 	}
@@ -222,7 +222,7 @@ class AutoCompleteSuggester {
 
 		// 根据建议类型和触发符生成插入内容
 		let insertText = '';
-		
+
 		if (suggestion.type === 'content') {
 			// 块快捷输入 (@@) - 直接插入内容，不带链接
 			insertText = suggestion.content;
@@ -254,22 +254,22 @@ class AutoCompleteSuggester {
 				event.preventDefault();
 				this.setSelectedIndex((this.selectedIndex + 1) % this.suggestions.length);
 				return true;
-				
+
 			case 'ArrowUp':
 				event.preventDefault();
 				this.setSelectedIndex((this.selectedIndex - 1 + this.suggestions.length) % this.suggestions.length);
 				return true;
-				
+
 			case 'Enter':
 				event.preventDefault();
 				this.selectSuggestion(this.selectedIndex);
 				return true;
-				
+
 			case 'Escape':
 				event.preventDefault();
 				this.hideSuggestions();
 				return true;
-				
+
 			default:
 				return false;
 		}
@@ -299,13 +299,13 @@ const DEFAULT_SETTINGS = {
 
 // 主插件类
 class YuhanboSearchPlugin extends Plugin {
-	
+
 	async onload() {
 		this.unloaded = false;
 		// 初始化索引和时间戳
 		this.searchIndex = {};
 		this.lastIndexTime = 0;
-		
+
 		// 加载设置
 		await this.loadSettings();
 
@@ -360,11 +360,11 @@ class YuhanboSearchPlugin extends Plugin {
 			this.app.workspace.on('editor-change', (editor) => {
 				this.cancelAutoComplete();
 				if (!this.settings.enableAutoComplete || this.unloaded) return;
-				
+
 				const cursor = editor.getCursor();
 				const line = editor.getLine(cursor.line);
 				const beforeCursor = line.substring(0, cursor.ch);
-				
+
 				// 输入期间做短暂防抖，避免大型仓库中每个按键都触发一次全量搜索。
 				window.clearTimeout(this.autoCompleteTimer);
 				this.autoCompleteTimer = window.setTimeout(() => {
@@ -481,17 +481,17 @@ class YuhanboSearchPlugin extends Plugin {
 					if (i % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const line = lines[i];
 					const lowerLine = line.toLowerCase();
-					
+
 					// 计算匹配分数
 					let score = 0;
 					let matchCount = 0;
-					
+
 					for (const keyword of keywords) {
 						if (lowerLine.includes(keyword)) {
 							matchCount++;
 							// 完整单词匹配得分更高
-							if (lowerLine.includes(' ' + keyword + ' ') || 
-								lowerLine.startsWith(keyword + ' ') || 
+							if (lowerLine.includes(' ' + keyword + ' ') ||
+								lowerLine.startsWith(keyword + ' ') ||
 								lowerLine.endsWith(' ' + keyword)) {
 								score += 3;
 							} else {
@@ -549,11 +549,11 @@ class YuhanboSearchPlugin extends Plugin {
 				for (const heading of fileCache.headings) {
 					if (headingCount++ % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const headingText = heading.heading.toLowerCase();
-					
+
 					// 计算匹配分数
 					let score = 0;
 					let matchCount = 0;
-					
+
 					for (const keyword of keywords) {
 						if (headingText.includes(keyword)) {
 							matchCount++;
@@ -612,11 +612,11 @@ class YuhanboSearchPlugin extends Plugin {
 					if (i % 128 === 0) { const pause = checkpoint(); if (pause) await pause; }
 					const line = lines[i];
 					const lowerLine = line.toLowerCase();
-					
+
 					// 计算匹配分数
 					let score = 0;
 					let matchCount = 0;
-					
+
 					for (const keyword of keywords) {
 						if (lowerLine.includes(keyword)) {
 							matchCount++;
@@ -627,7 +627,7 @@ class YuhanboSearchPlugin extends Plugin {
 					// 只有所有关键词都匹配才加入结果
 					if (matchCount === keywords.length && line.trim().length > 0) {
 						const blockId = this.generateBlockId(line, i);
-						
+
 						addSuggestion(results, {
 							type: 'block',
 							content: line.trim(),
@@ -766,7 +766,7 @@ class YuhanboSearchPlugin extends Plugin {
 	getAllTags(fileCache) {
 		const tags = [];
 		if (!fileCache) return tags;
-		
+
 		if (fileCache.frontmatter && fileCache.frontmatter.tags) {
 			if (Array.isArray(fileCache.frontmatter.tags)) {
 				tags.push(...fileCache.frontmatter.tags);
@@ -774,16 +774,16 @@ class YuhanboSearchPlugin extends Plugin {
 				tags.push(fileCache.frontmatter.tags);
 			}
 		}
-		
+
 		if (fileCache.tags) {
 			for (const tag of fileCache.tags) {
 				tags.push(tag.tag);
 			}
 		}
-		
+
 		return tags;
 	}
-	
+
 	/**
 	 * 提取标题
 	 * @param {TFile} file - 文件对象
@@ -796,7 +796,7 @@ class YuhanboSearchPlugin extends Plugin {
 			h3: [],
 			h4: []
 		};
-		
+
 		const fileCache = this.app.metadataCache.getFileCache(file);
 		if (fileCache && fileCache.headings) {
 			for (const heading of fileCache.headings) {
@@ -804,7 +804,7 @@ class YuhanboSearchPlugin extends Plugin {
 					text: heading.heading,
 					position: heading.position.start.line
 				};
-				
+
 				switch (heading.level) {
 					case 1:
 						headings.h1.push(headingObj);
@@ -823,10 +823,10 @@ class YuhanboSearchPlugin extends Plugin {
 				}
 			}
 		}
-		
+
 		return headings;
 	}
-	
+
 	/**
 	 * 提取引用
 	 * @param {string} content - 文件内容
@@ -835,7 +835,7 @@ class YuhanboSearchPlugin extends Plugin {
 	async extractQuotes(content, checkpoint) {
 		const quotes = [];
 		const lines = content.split('\n');
-		
+
 		for (let i = 0; i < lines.length; i++) {
 			if (i % 128 === 0) {
 				const pause = checkpoint();
@@ -845,10 +845,10 @@ class YuhanboSearchPlugin extends Plugin {
 				quotes.push(lines[i]);
 			}
 		}
-		
+
 		return quotes;
 	}
-	
+
 	/**
 	 * 原有的搜索功能 - 使用加权搜索算法
 	 * @param {string} query - 查询字符串
@@ -860,9 +860,9 @@ class YuhanboSearchPlugin extends Plugin {
 		const index = this.searchIndex;
 		const results = [];
 		const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 0);
-		
+
 		if (keywords.length === 0) return results;
-		
+
 		const defaultOptions = {
 			fileName: true,
 			directory: true,
@@ -871,15 +871,15 @@ class YuhanboSearchPlugin extends Plugin {
 			content: true,
 			quotes: true
 		};
-		
+
 		const searchOptions = {...defaultOptions, ...options};
-		
+
 		for (const filePath in index) {
 			const pause = checkpoint();
 			if (pause) await pause;
 			const fileData = index[filePath];
 			const file = this.app.vault.getAbstractFileByPath(filePath);
-			
+
 			if (!(file instanceof TFile)) continue;
 			let fileScore = 0;
 			const matches = [];
@@ -890,7 +890,7 @@ class YuhanboSearchPlugin extends Plugin {
 				matchCount++;
 				if (matches.length < 3) matches.push(match);
 			};
-			
+
 			// 搜索文件名
 			if (searchOptions.fileName) {
 				const fileName = fileData.fileName.toLowerCase();
@@ -905,7 +905,7 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			}
-			
+
 			// 搜索目录
 			if (searchOptions.directory) {
 				const directory = fileData.directory.toLowerCase();
@@ -920,7 +920,7 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			}
-			
+
 			// 搜索标签
 			if (searchOptions.tags && fileData.tags) {
 				for (const tag of fileData.tags) {
@@ -956,7 +956,7 @@ class YuhanboSearchPlugin extends Plugin {
 						}
 					}
 				}
-				
+
 				for (const h2 of fileData.headings.h2) {
 					const pause = checkpoint(); if (pause) await pause;
 					const heading = h2.text.toLowerCase();
@@ -972,7 +972,7 @@ class YuhanboSearchPlugin extends Plugin {
 						}
 					}
 				}
-				
+
 				for (const h3 of fileData.headings.h3) {
 					const pause = checkpoint(); if (pause) await pause;
 					const heading = h3.text.toLowerCase();
@@ -988,7 +988,7 @@ class YuhanboSearchPlugin extends Plugin {
 						}
 					}
 				}
-				
+
 				for (const h4 of fileData.headings.h4) {
 					const pause = checkpoint(); if (pause) await pause;
 					const heading = h4.text.toLowerCase();
@@ -1005,7 +1005,7 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			}
-			
+
 			if (searchOptions.content && fileData.content) {
 				const content = fileData.content;
 				const lowerContent = content.toLowerCase();
@@ -1057,7 +1057,7 @@ class YuhanboSearchPlugin extends Plugin {
 					}
 				}
 			}
-			
+
 			if (fileScore > 0) {
 				results.push({
 					file: file,
@@ -1068,9 +1068,9 @@ class YuhanboSearchPlugin extends Plugin {
 				});
 			}
 		}
-		
+
 		results.sort((a, b) => b.score - a.score);
-		
+
 		return results;
 	}
 
@@ -1098,14 +1098,14 @@ class SearchModal extends Modal {
 
 	forceInputFocus() {
 		if (!this.searchInput) return;
-		
+
 		// 使用多次尝试聚焦的方式，确保在不同情况下都能成功聚焦
 		const attemptFocus = (attempts = 0) => {
 			if (!this.searchInput) return;
 			try {
 				this.searchInput.focus();
 				this.searchInput.select();
-				
+
 				// 如果聚焦失败且尝试次数小于3，则再次尝试
 				if (document.activeElement !== this.searchInput && attempts < 3) {
 					this.focusTimer = window.setTimeout(() => attemptFocus(attempts + 1), 50);
@@ -1114,28 +1114,28 @@ class SearchModal extends Modal {
 				console.error("聚焦失败:", e);
 			}
 		};
-		
+
 		// 立即尝试聚焦
 		attemptFocus();
 	}
 
 	onOpen() {
 		this.modalEl.addClass('yuhanbo-search-modal-container');
-		
+
 		const {contentEl} = this;
 		contentEl.empty();
 		contentEl.addClass('yuhanbo-search-modal');
-		
+
 		// 确保模态框完全打开后再设置焦点
 		this.focusTimer = window.setTimeout(() => this.forceInputFocus(), 50);
-		
+
 		contentEl.createEl('div', {
 			text: '搜索范围:',
 			cls: 'search-scope-label'
 		});
-		
+
 		const scopeButtonsContainer = contentEl.createDiv('search-scope-buttons');
-		
+
 		const options = [
 			{ id: 'fileName', label: '文件名' },
 			{ id: 'directory', label: '目录' },
@@ -1144,11 +1144,11 @@ class SearchModal extends Modal {
 			{ id: 'content', label: '内容' },
 			{ id: 'quotes', label: '引用' }
 		];
-		
+
 		options.forEach(option => {
 			this.createScopeButton(scopeButtonsContainer, option.label, option.id);
 		});
-		
+
 		const searchContainer = contentEl.createDiv('search-container');
 		this.searchInput = searchContainer.createEl('input', {
 			attr: {
@@ -1159,10 +1159,10 @@ class SearchModal extends Modal {
 			},
 			cls: 'search-input large yuhanbo-search-input-js'
 		});
-		
+
 		this.searchResultsEl = contentEl.createDiv('search-results');
-		
-		
+
+
 		this.searchInput.addEventListener('input', () => {
 			window.clearTimeout(this.searchDebounceTimer);
 			this.cancelSearch();
@@ -1178,69 +1178,69 @@ class SearchModal extends Modal {
 				e.preventDefault();
 				e.stopPropagation();
 			}
-			
+
 			if (this.searchResults.length === 0) {
 				return;
 			}
-			
+
 			if (e.key === 'ArrowDown') {
 				this.selectNextResult();
 			}
-			
+
 			if (e.key === 'ArrowUp') {
 				this.selectPreviousResult();
 			}
-			
+
 			if (e.key === 'Enter') {
 				if (this.selectedResultIndex >= 0 && this.selectedResultIndex < this.searchResults.length) {
 					e.preventDefault();
 					this.openResult(this.searchResults[this.selectedResultIndex]);
-				} 
+				}
 				else if (this.searchInput.value.trim().length >= 2) {
 					this.performSearch(this.searchInput.value.trim());
 				}
 			}
 		});
-		
+
 	}
-	
+
 	selectNextResult() {
 		if (this.searchResults.length === 0) return;
-		
+
 		this.removeSelectionHighlight();
-		
+
 		this.selectedResultIndex = (this.selectedResultIndex + 1) % this.searchResults.length;
-		
+
 		this.highlightSelectedResult();
 	}
-	
+
 	selectPreviousResult() {
 		if (this.searchResults.length === 0) return;
-		
+
 		this.removeSelectionHighlight();
-		
+
 		this.selectedResultIndex = (this.selectedResultIndex - 1 + this.searchResults.length) % this.searchResults.length;
-		
+
 		this.highlightSelectedResult();
 	}
-	
+
 	removeSelectionHighlight() {
 		if (this.highlightedResultEl) this.highlightedResultEl.removeClass('selected');
 		this.highlightedResultEl = null;
 	}
-	
+
 	highlightSelectedResult() {
 		if (this.selectedResultIndex < 0) return;
-		
+
 		const allResults = this.resultsListEl ? this.resultsListEl.children : [];
 		if (this.selectedResultIndex < allResults.length) {
 			const selectedItem = allResults[this.selectedResultIndex];
 			selectedItem.addClass('selected');
 			this.highlightedResultEl = selectedItem;
-			
+
 			const containerRect = this.modalEl.getBoundingClientRect();
 			const itemRect = selectedItem.getBoundingClientRect();
-			
+
 			if (itemRect.top < containerRect.top || itemRect.bottom > containerRect.bottom) {
 				selectedItem.scrollIntoView({
 					behavior: 'smooth',
@@ -1249,10 +1249,10 @@ class SearchModal extends Modal {
 			}
 		}
 	}
-	
+
 	openResult(result) {
 		if (!result || !result.file) return;
-		
+
 		const lineMatch = result.firstLineMatch || result.matches.find(m => m.line !== undefined);
 		if (lineMatch && lineMatch.line !== undefined) {
 			this.app.workspace.openLinkText(result.file.path, '', true, {
@@ -1263,31 +1263,31 @@ class SearchModal extends Modal {
 		}
 		this.close();
 	}
-	
+
 	createScopeButton(container, label, optionName) {
 		const button = container.createEl('div', {
 			text: label,
 			cls: 'search-scope-button' + (this.options[optionName] ? ' active' : '')
 		});
-		
+
 		button.addEventListener('click', () => {
 			this.options[optionName] = !this.options[optionName];
-			
+
 			if (this.options[optionName]) {
 				button.addClass('active');
 			} else {
 				button.removeClass('active');
 			}
-			
+
 			const query = this.searchInput.value.trim();
 			if (query.length >= 2) {
 				this.performSearch(query);
 			}
 		});
-		
+
 		return button;
 	}
-	
+
 	clearSearchResults() {
 		this.searchResultsEl?.empty();
 		this.searchResults = [];
@@ -1346,56 +1346,56 @@ class SearchModal extends Modal {
 		batch.forEach((result, offset) => {
 			const index = start + offset;
 			const resultItem = resultsList.createDiv('result-item');
-			
+
 			resultItem.dataset.resultIndex = index;
-			
+
 			resultItem.createEl('div', {
 				text: result.file.name,
 				cls: 'result-title'
 			});
-			
+
 			resultItem.addEventListener('click', () => {
 				this.openResult(result);
 			});
-			
+
 			resultItem.addEventListener('mouseenter', () => {
 				this.removeSelectionHighlight();
-				
+
 				this.selectedResultIndex = index;
 				this.highlightSelectedResult();
 			});
-			
+
 			resultItem.createEl('div', {
 				text: result.file.path,
 				cls: 'result-path'
 			});
-			
+
 			const matchesContainer = resultItem.createDiv('matches-container');
-			
+
 			const maxMatchesToShow = 3;
 			const matchesToShow = result.matches.slice(0, maxMatchesToShow);
-			
+
 			for (const match of matchesToShow) {
 				const matchItem = matchesContainer.createDiv('match-item');
-				
+
 				const matchTypeSpan = matchItem.createEl('span', {
 					cls: 'match-type'
 				});
 				matchTypeSpan.setText(`[${this.getMatchTypeLabel(match.type)}] `);
-				
+
 				matchItem.createEl('span', {
 					text: this.plugin.truncateText(String(match.context || ''), 500),
 					cls: 'match-context'
 				});
 			}
-			
+
 			if ((result.matchCount || result.matches.length) > maxMatchesToShow) {
 				matchesContainer.createEl('div', {
 					text: `...以及其他 ${(result.matchCount || result.matches.length) - maxMatchesToShow} 个匹配项`,
 					cls: 'more-matches'
 				});
 			}
-			
+
 			resultItem.createEl('div', {
 				text: `得分: ${result.score}`,
 				cls: 'result-score'
@@ -1428,12 +1428,12 @@ class SearchModal extends Modal {
 		contentEl.empty();
 		window.clearTimeout(this.focusTimer);
 		window.clearTimeout(this.searchDebounceTimer);
-		
+
 		this.cancelSearch();
 		this.clearSearchResults();
 		this.searchInput = null;
 		this.searchResultsEl = null;
-		
+
 		this.modalEl.removeClass('yuhanbo-search-modal-container');
 	}
 }
@@ -1655,7 +1655,7 @@ class YuhanboSearchSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 					new Notice('设置已保存，请重启插件以使设置生效');
 				}));
-				
+
 		new Setting(containerEl)
 			.setName('手动更新索引')
 			.setDesc('点击按钮手动更新搜索索引')

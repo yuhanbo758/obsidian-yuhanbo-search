@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - main.js
+      - src/main.js
+      - .gitattributes
       - styles.css
       - manifest.json
       - package.json
@@ -66,7 +68,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # 模拟社区审核的干净构建，重新生成入口并检查与仓库产物一致。
+          rm -f -- main.js
           npm run build
+          git diff --exit-code -- main.js
           npm test
           git diff --check
           test -s main.js

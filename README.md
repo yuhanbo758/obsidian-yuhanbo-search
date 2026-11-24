@@ -53,7 +53,7 @@ Reload Obsidian and enable **Yuhanbo Search**.
 
 ## Development and releases
 
-`npm run build` checks the distributable `main.js`, and `npm test` runs the search regression suite. A push to `main` that changes release files runs GitHub Actions. If the manifest version has already been released, the workflow increments the patch version; otherwise it releases the current version. Each release attaches the files required by Obsidian and includes build-provenance attestations.
+Edit `src/main.js`, then run `npm run build` to check its syntax and regenerate the root `main.js` byte for byte. Run `npm test` against the generated file. Commit the source and generated entry together. A push to `main` that changes release files runs GitHub Actions. If the manifest version has already been released, the workflow increments the patch version; otherwise it releases the current version. Each release attaches the files required by Obsidian and includes build-provenance attestations.
 
 ## License
 
